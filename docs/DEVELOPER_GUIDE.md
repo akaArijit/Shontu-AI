@@ -1,0 +1,287 @@
+# Developer Guide
+
+## Quick Start
+
+### Prerequisites
+- Python 3.11+
+- PostgreSQL 15+ (or Supabase)
+- Node.js 18+ (for API/frontend)
+
+### Installation
+
+```bash
+# Clone and setup
+git clone <repo>
+cd fund-engine
+
+# Python dependencies
+pip install -r requirements.txt
+
+# Node dependencies (for API)
+cd api && npm install
+
+# Run tests
+python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
+```
+
+### Project Structure
+```
+fund-engine/
+├── resolution/          # Scheme dedup + benchmark mapping
+├── ingestion/           # Data fetchers (AMFI, mfapi, NSE, RBI, etc.)
+├── features/            # Feature engineering pipeline
+├── rules/               # Rule engine (alerts)
+├── scoring/             # Scoring engine (0-100)
+├── api/                 # Express API (Next.js frontend separate)
+├── docs/                # Documentation
+├── config/              # YAML configs (scoring, rules)
+├── tests/               # Integration tests
+└── scripts/             # Operational scripts
+```
+
+---
+
+## Running the Pipeline
+
+### Full Nightly Run (Production)
+```bash
+# From project root
+python scripts/run_nightly.py --date 2024-01-15
+```
+
+### Individual Steps
+```bash
+# 1. Ingestion only
+python -m ingestion.fetchers --source amfi,mfapi,nse
+
+# 2. Resolution only
+python -m resolution.scheme_dedup --folios-file folios.csv
+
+# 3. Feature engineering
+python -m features.feature_engineering --as-of 2024-01-15
+
+# 4. Rules + Scoring
+python -m rules.rule_engine --features-file features.json
+python -m scoring.scoring_engine --features-file features.json
+```
+
+### Development Mode
+```bash
+# Run with sample data
+python test_e2e_pipeline.py
+
+# Run specific module demo
+python resolution/demo_scheme_dedup.py
+python features/demo_feature_engineering.py
+python rules/demo_rule_engine.py
+python scoring/demo_scoring_engine.py
+```
+
+---
+
+## Adding a New Data Source
+
+### 1. Create Fetcher Class
+```python
+# ingestion/fetchers.py
+class MyNewSourceFetcher(BaseFetcher):
+    @property
+    def source(self) -> DataSource:
+        return DataSource.MY_NEW_SOURCE
+    
+    def fetch(self) -> list[NavRecord]:
+        # Implement fetch logic with retry
+        response = self._request_with_retry("https://api.example.com/data")
+        # Parse and return standardized records
+        return [NavRecord(...), ...]
+```
+
+### 2. Register in Orchestrator
+```python
+# In your pipeline script
+orchestrator = IngestionOrchestrator()
+orchestrator.register_fetcher(MyNewSourceFetcher())
+```
+
+### 3. Add Data Model (if needed)
+```python
+@dataclass
+class MyNewRecord:
+    field1: str
+    field2: float
+    source: DataSource = DataSource.MY_NEW_SOURCE
+    fetched_at: datetime = field(default_factory=datetime.utcnow)
+```
+
+---
+
+## Adding a New Alert Rule
+
+### Option 1: YAML Config (No Code Changes)
+```yaml
+# config/rules.yaml
+alert_rules:
+  - id: my_custom_rule
+    alert_type: high_volatility
+    condition: "volatility_1y > 0.30"
+    severity: high
+    description: "Custom high volatility threshold for aggressive funds"
+    category_overrides:
+      Small Cap:
+        condition: "volatility_1y > 0.35"
+```
+
+### Option 2: Programmatic
+```python
+from rules.rule_engine import AlertRule, AlertType, AlertSeverity
+
+engine = RuleEngine()
+engine.add_rule(AlertRule(
+    id="my_custom_rule",
+    alert_type=AlertType.HIGH_VOLATILITY,
+    condition="volatility_1y > 0.30",
+    severity=AlertSeverity.HIGH,
+    description="Custom rule",
+))
+```
+
+---
+
+## Modifying Scoring Weights
+
+### 1. Update YAML Config
+```yaml
+# config/scoring_config.yaml
+version: "1.1"
+effective_date: "2024-06-01"
+components:
+  benchmark_outperformance:
+    weight: 0.35      # Increased from 0.30
+    max_points: 35    # Increased from 30
+    # ... rest unchanged
+penalty_per_month: 2.5  # Increased from 2.0
+```
+
+### 2. Versioning
+- Each config change gets new version + effective_date
+- Historical scores reproducible with old configs
+- Load specific version: `ScoringConfig.load("config/v1.0_scoring.yaml")`
+
+---
+
+## Testing Your Changes
+
+### Unit Tests
+```bash
+# Run specific module tests
+python -m pytest resolution/test_scheme_dedup.py -v
+python -m pytest scoring/test_scoring_engine.py::TestScoringEngine::test_good_fund_high_score -v
+```
+
+### Integration Test
+```bash
+# Full pipeline with sample data
+python test_e2e_pipeline.py
+```
+
+### Manual Verification
+```python
+# Quick REPL test
+from scoring.scoring_engine import create_default_scoring_engine
+
+engine = create_default_scoring_engine()
+features = {"alpha_1y": 0.05, "category_percentile_1y": 80, ...}
+score = engine.calculate(features, "TEST_SCHEME", date(2024, 1, 15))
+print(score.to_json())
+```
+
+---
+
+## Debugging Tips
+
+### Enable Debug Logging
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Or for specific module
+logging.getLogger('features.feature_engineering').setLevel(logging.DEBUG)
+```
+
+### Common Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `category_percentile_1y` not defined | Feature pipeline didn't compute for scheme's category | Check `scheme_categories` mapping loaded correctly |
+| Alpha is None | No benchmark data for scheme's category | Verify `benchmark_navs` loaded for benchmark_code |
+| Rule eval error "name X not defined" | Feature missing from features dict | Check feature names match rule conditions exactly |
+| Score > 100 or < 0 | Penalty or component calculation bug | Check `_calculate_penalty` and component scoring |
+
+### Inspect Intermediate Data
+```python
+# Save features for debugging
+pipeline.export_features(features, "debug_features.json")
+
+# Save alerts
+import json
+with open("debug_alerts.json", "w") as f:
+    json.dump([a.to_dict() for a in alerts], f, indent=2, default=str)
+```
+
+---
+
+## Code Style & Conventions
+
+### Python
+- Type hints mandatory for public APIs
+- Dataclasses for data models
+- Enums for fixed value sets
+- Docstrings for all public classes/functions
+- Max line length: 100 chars
+
+### Naming
+- Classes: `PascalCase`
+- Functions/variables: `snake_case`
+- Constants: `UPPER_SNAKE_CASE`
+- Private: `_leading_underscore`
+
+### Error Handling
+- Custom exceptions per module (`IngestionError`, `RuleEvaluationError`)
+- Fail fast for data integrity issues
+- Graceful degradation for optional sources (log warning, continue)
+
+---
+
+## Performance Optimization
+
+### Current Benchmarks (10 schemes, 2 years data)
+| Stage | Time |
+|-------|------|
+| Ingestion (mocked) | < 1s |
+| Dedup (100 folios) | < 10ms |
+| Features (10 schemes) | ~500ms |
+| Rules (10 schemes) | < 50ms |
+| Scoring (10 schemes) | < 50ms |
+| **Total** | **~600ms** |
+
+### Scaling to 400 Schemes
+- Feature engineering: Parallelize per scheme (`multiprocessing.Pool`)
+- Rules/Scoring: Already O(n), trivial
+- Database: Index on `(scheme_code, as_of_date)` for all tables
+
+---
+
+## Contributing
+
+1. Create feature branch: `git checkout -b feature/xxx`
+2. Add tests for new functionality
+3. Run full test suite: `python -m pytest`
+4. Update documentation if needed
+5. Submit PR with description of changes
+
+### Pre-commit Checklist
+- [ ] All tests pass
+- [ ] Type hints added
+- [ ] Docstrings updated
+- [ ] Config versioned if changed
+- [ ] No hardcoded secrets

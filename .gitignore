@@ -1,0 +1,89 @@
+# Fund Monitoring Engine - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+pip-wheel-metadata/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Data files (generated)
+*.json
+!config/*.json
+data/
+exports/
+*.parquet
+*.csv
+
+# Model artifacts
+models/
+*.pkl
+*.joblib
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# IDE specific
+.vscode/settings.json
+.idea/workspace.xml
+
+# Coverage reports
+coverage.xml
+*.cover
+
+# Distribution packages
+*.whl
+*.tar.gz
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.turbo/
+frontend/coverage/
+frontend/.env.local
+frontend/*.log

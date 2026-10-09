@@ -1,0 +1,191 @@
+# GitHub Actions - CI/CD Pipeline for MFD Fund Monitoring
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # ============================================================
+  # TESTS
+  # ============================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r api/requirements.txt
+
+      - name: Run unit tests
+        run: |
+          python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v --tb=short
+
+      - name: Run integration test
+        run: |
+          python test_e2e_pipeline.py
+
+      - name: Check code formatting
+        run: |
+          pip install black isort
+          black --check .
+          isort --check-only .
+
+  # ============================================================
+  # DOCKER BUILD
+  # ============================================================
+  docker-build:
+    name: Build Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================
+  # DEPLOY TO RENDER (API)
+  # ============================================================
+  deploy-api:
+    name: Deploy API to Render
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Render
+        uses: render/actions/deploy@v1
+        with:
+          service-id: ${{ secrets.RENDER_API_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+          wait-for-success: true
+
+  # ============================================================
+  # DEPLOY TO RENDER (BATCH CRON)
+  # ============================================================
+  deploy-batch:
+    name: Deploy Batch Job to Render
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Render
+        uses: render/actions/deploy@v1
+        with:
+          service-id: ${{ secrets.RENDER_BATCH_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+          wait-for-success: true
+
+  # ============================================================
+  # DEPLOY TO VERCEL (FRONTEND - if separate repo)
+  # ============================================================
+  deploy-frontend:
+    name: Deploy Frontend to Vercel
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./frontend
+          vercel-args: '--prod'
+
+  # ============================================================
+  # DATABASE MIGRATIONS
+  # ============================================================
+  migrate-db:
+    name: Run Database Migrations
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install psycopg2-binary
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          for migration in db/migrations/*.sql; do
+            echo "Running $migration"
+            psql "$DATABASE_URL" -f "$migration"
+          done
+
+  # ============================================================
+  # NOTIFICATIONS
+  # ============================================================
+  notify:
+    name: Send Notification
+    needs: [deploy-api, deploy-batch, migrate-db]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack notification
+        if: secrets.SLACK_WEBHOOK_URL != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: "MFD Fund Monitoring ${{ job.status }} - ${{ github.ref }}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

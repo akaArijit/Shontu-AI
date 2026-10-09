@@ -1,0 +1,47 @@
+version: "1.0"
+effective_date: "2024-01-01"
+components:
+  benchmark_outperformance:
+    weight: 0.30
+    max_points: 30
+    scale_type: "alpha_threshold"
+    scale_params:
+      alpha_1y_thresholds:
+        - [0.05, 30]
+        - [0.02, 20]
+        - [0.0, 10]
+        - [-0.02, 5]
+        - [-0.05, 0]
+  category_ranking:
+    weight: 0.20
+    max_points: 20
+    scale_type: "percentile_linear"
+    scale_params: {}
+  consistency_of_returns:
+    weight: 0.20
+    max_points: 20
+    scale_type: "positive_months_ratio"
+    scale_params:
+      lookback_months: 36
+  drawdown_control:
+    weight: 0.15
+    max_points: 15
+    scale_type: "inverse_threshold"
+    scale_params:
+      max_dd_thresholds:
+        - [0.10, 15]
+        - [0.15, 10]
+        - [0.20, 5]
+        - [0.25, 0]
+  volatility_adjusted:
+    weight: 0.15
+    max_points: 15
+    scale_type: "inverse_threshold"
+    scale_params:
+      vol_thresholds:
+        - [0.15, 15]
+        - [0.18, 10]
+        - [0.22, 5]
+        - [0.25, 0]
+penalty_per_month: 2.0
+penalty_cap: 20.0

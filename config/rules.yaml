@@ -1,0 +1,69 @@
+alert_rules:
+  - id: underperform_3m
+    alert_type: underperform_3m
+    condition: "consecutive_underperf_months >= 3"
+    severity: medium
+    description: "Fund underperformed benchmark for 3+ consecutive months"
+    category_overrides: {}
+
+  - id: underperform_6m
+    alert_type: underperform_6m
+    condition: "consecutive_underperf_months >= 6"
+    severity: high
+    description: "Fund underperformed benchmark for 6+ consecutive months"
+    category_overrides: {}
+
+  - id: below_top25_category
+    alert_type: below_top25_category
+    condition: "category_percentile_1y is not None and category_percentile_1y < 75"
+    severity: medium
+    description: "Fund ranked below top 25% in category over 1Y"
+    category_overrides: {}
+
+  - id: below_top50_category
+    alert_type: below_top50_category
+    condition: "category_percentile_1y is not None and category_percentile_1y < 50"
+    severity: high
+    description: "Fund ranked below top 50% in category over 1Y"
+    category_overrides: {}
+
+  - id: rank_decline
+    alert_type: rank_decline
+    condition: "category_rank_1y is not None and category_rank_3m is not None and (category_rank_1y - category_rank_3m) > 10"
+    severity: medium
+    description: "Category rank declined by more than 10 positions in 3 months"
+    category_overrides: {}
+
+  - id: benchmark_deviation
+    alert_type: benchmark_deviation
+    condition: "alpha_1y is not None and abs(alpha_1y) > 0.05"
+    severity: low
+    description: "1Y alpha deviation exceeds 5% (positive or negative)"
+    category_overrides:
+      Small Cap:
+        condition: "alpha_1y is not None and abs(alpha_1y) > 0.10"
+        severity: low
+      Mid Cap:
+        condition: "alpha_1y is not None and abs(alpha_1y) > 0.08"
+        severity: low
+
+  - id: high_drawdown
+    alert_type: high_drawdown
+    condition: "max_drawdown_1y is not None and max_drawdown_1y > 0.20"
+    severity: medium
+    description: "1Y max drawdown exceeds 20%"
+    category_overrides: {}
+
+  - id: high_volatility
+    alert_type: high_volatility
+    condition: "volatility_1y is not None and volatility_1y > 0.25"
+    severity: low
+    description: "1Y annualized volatility exceeds 25%"
+    category_overrides: {}
+
+  - id: consecutive_underperf
+    alert_type: consecutive_underperf
+    condition: "consecutive_underperf_months >= 4"
+    severity: medium
+    description: "4+ consecutive months of benchmark underperformance"
+    category_overrides: {}
