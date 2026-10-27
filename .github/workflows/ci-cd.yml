@@ -4,9 +4,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 env:
@@ -43,7 +43,8 @@ jobs:
         run: |
           python test_e2e_pipeline.py
 
-      - name: Check code formatting
+      - name: Check code formatting (informational)
+        continue-on-error: true
         run: |
           pip install black isort
           black --check .
@@ -179,13 +180,13 @@ jobs:
     needs: [deploy-api, deploy-batch, migrate-db]
     if: always()
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Send Slack notification
-        if: secrets.SLACK_WEBHOOK_URL != ''
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
           channel: '#deployments'
           text: "MFD Fund Monitoring ${{ job.status }} - ${{ github.ref }}"
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

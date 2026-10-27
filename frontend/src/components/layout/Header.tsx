@@ -3,6 +3,7 @@
 import { usePipelineHealth } from '@/hooks/useQueries';
 import { cn, formatDateTime, getSeverityColor, getSeverityIcon } from '@/lib/utils';
 import { RefreshCw, AlertTriangle, Bell, Menu, ChevronDown, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 interface HeaderProps {
@@ -25,6 +26,14 @@ export function Header({ onMenuClick, sidebarCollapsed }: HeaderProps) {
     degraded: 'Degraded',
     failed: 'Failed',
   };
+
+  const runStatus = (health?.last_run_status || '').toLowerCase();
+  const statusTone: keyof typeof statusColors =
+    !runStatus || runStatus === 'healthy' || runStatus === 'success' || runStatus === 'completed'
+      ? 'healthy'
+      : runStatus === 'degraded' || runStatus === 'partial' || runStatus === 'running'
+        ? 'degraded'
+        : 'failed';
 
   return (
     <header
@@ -55,11 +64,11 @@ export function Header({ onMenuClick, sidebarCollapsed }: HeaderProps) {
             <span
               className={cn(
                 'w-2 h-2 rounded-full',
-                health ? statusColors[health.status as keyof typeof statusColors] : 'bg-neutral-400'
+                health ? statusColors[statusTone] : 'bg-neutral-400'
               )}
             />
             <span className="text-sm font-medium text-neutral-700">
-              {health ? statusLabels[health.status as keyof typeof statusLabels] : 'Loading...'}
+              {health ? statusLabels[statusTone] : 'Loading...'}
             </span>
           </div>
 

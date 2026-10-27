@@ -25,18 +25,45 @@ import {
   EyeOff
 } from 'lucide-react';
 
+type ComponentKey =
+  | 'benchmark_outperformance'
+  | 'category_ranking'
+  | 'consistency_of_returns'
+  | 'drawdown_control'
+  | 'volatility_adjusted';
+
+interface ComponentConfig {
+  weight: number;
+  max_points: number;
+}
+
+type ScoringConfig = Record<ComponentKey, ComponentConfig> & {
+  penalty_per_month: number;
+  penalty_cap: number;
+};
+
+interface AlertRuleConfig {
+  id: string;
+  enabled: boolean;
+  severity: string;
+  threshold: number;
+  overrides: Record<string, number>;
+}
+
+const DEFAULT_SCORING_CONFIG: ScoringConfig = {
+  benchmark_outperformance: { weight: 0.30, max_points: 30 },
+  category_ranking: { weight: 0.20, max_points: 20 },
+  consistency_of_returns: { weight: 0.20, max_points: 20 },
+  drawdown_control: { weight: 0.15, max_points: 15 },
+  volatility_adjusted: { weight: 0.15, max_points: 15 },
+  penalty_per_month: 2.0,
+  penalty_cap: 20.0,
+};
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'scoring' | 'rules' | 'benchmarks' | 'system' | 'notifications'>('scoring');
-  const [scoringConfig, setScoringConfig] = useState({
-    benchmark_outperformance: { weight: 0.30, max_points: 30 },
-    category_ranking: { weight: 0.20, max_points: 20 },
-    consistency_of_returns: { weight: 0.20, max_points: 20 },
-    drawdown_control: { weight: 0.15, max_points: 15 },
-    volatility_adjusted: { weight: 0.15, max_points: 15 },
-    penalty_per_month: 2.0,
-    penalty_cap: 20.0,
-  });
-  const [rulesConfig, setRulesConfig] = useState([
+  const [scoringConfig, setScoringConfig] = useState<ScoringConfig>(DEFAULT_SCORING_CONFIG);
+  const [rulesConfig, setRulesConfig] = useState<AlertRuleConfig[]>([
     { id: 'underperform_3m', enabled: true, severity: 'medium', threshold: 3, overrides: {} },
     { id: 'underperform_6m', enabled: true, severity: 'high', threshold: 6, overrides: {} },
     { id: 'below_top25_category', enabled: true, severity: 'medium', threshold: 75, overrides: {} },
@@ -68,15 +95,13 @@ export default function SettingsPage() {
     { id: 'system', label: 'System', icon: Shield },
   ];
 
-  const COMPONENT_KEYS = [
+  const COMPONENT_KEYS: ComponentKey[] = [
     'benchmark_outperformance',
     'category_ranking',
     'consistency_of_returns',
     'drawdown_control',
     'volatility_adjusted',
-  ] as const;
-
-  type ComponentKey = typeof COMPONENT_KEYS[number];
+  ];
 
   const handleWeightChange = (component: ComponentKey, field: 'weight' | 'max_points', value: number) => {
     const totalWeight = COMPONENT_KEYS
@@ -90,7 +115,7 @@ export default function SettingsPage() {
 
     setScoringConfig(prev => ({
       ...prev,
-      [component]: { ...prev[component as keyof typeof scoringConfig], [field]: value },
+      [component]: { ...prev[component], [field]: value },
     }));
   };
 
@@ -168,8 +193,8 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(scoringConfig).map(([key, config]) => {
-                    if (key === 'penalty_per_month' || key === 'penalty_cap') return null;
+                  {COMPONENT_KEYS.map((key) => {
+                    const config = scoringConfig[key];
                     const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                     return (
                       <Card key={key} className="p-4" variant="bordered">
@@ -220,7 +245,6 @@ export default function SettingsPage() {
                         onChange={e => setScoringConfig(prev => ({ ...prev, penalty_per_month: parseFloat(e.target.value) }))}
                         min="0"
                         max="10"
-                        step="0.5"
                       />
                       <p className="text-xs text-neutral-500 mt-1">Points deducted per consecutive underperformance month</p>
                     </div>

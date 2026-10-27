@@ -116,7 +116,6 @@ export function SchemeTable({ schemes, loading, onSchemeClick }: SchemeTableProp
             value={filters.search}
             onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             className="w-full px-3 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            placeholder="Search schemes..."
           />
         </div>
         <div className="min-w-[150px]">

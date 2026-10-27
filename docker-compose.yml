@@ -47,7 +47,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SCORING_CONFIG_PATH: /app/config/scoring_config.yaml
       RULES_CONFIG_PATH: /app/config/rules.yaml
-      BENCHMARK_MAPPINGS_PATH: /app/config/explicit_benchmark_mappings.yaml
+      BENCHMARK_MAPPINGS_PATH: /app/config/explicit_benchmark_mappings.json
     ports:
       - "8000:8000"
     depends_on:
@@ -76,7 +76,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SCORING_CONFIG_PATH: /app/config/scoring_config.yaml
       RULES_CONFIG_PATH: /app/config/rules.yaml
-      BENCHMARK_MAPPINGS_PATH: /app/config/explicit_benchmark_mappings.yaml
+      BENCHMARK_MAPPINGS_PATH: /app/config/explicit_benchmark_mappings.json
     entrypoint: ["python", "scripts/run_nightly.py"]
     depends_on:
       postgres:

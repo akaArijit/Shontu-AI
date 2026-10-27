@@ -88,6 +88,7 @@ export interface CategoryRankingItem {
   category: string;
   scheme_code: string;
   scheme_name: string;
+  amc?: string;
   fund_health_score: number;
   category_rank: number;
   category_percentile: number;

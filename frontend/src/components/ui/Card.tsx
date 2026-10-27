@@ -34,7 +34,6 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
           hover && 'transition-shadow hover:shadow-card-hover cursor-pointer',
           className
         )}
-        ref={ref}
         {...props}
       >
         {children}

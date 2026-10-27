@@ -22,7 +22,7 @@ export function useAsOfDate() {
     queryKey: ['latestAsOfDate'],
     queryFn: async () => {
       const res = await api.getLatestScores({ limit: 1 });
-      return res.data.as_of_date;
+      return res.as_of_date;
     },
     staleTime: 1000 * 60 * 60, // 1 hour
   });

@@ -162,7 +162,6 @@ const MOCK_PIPELINE_HEALTH: PipelineHealth = {
   last_run_duration_seconds: 1245,
   schemes_processed: 148,
   alerts_generated: 23,
-  scores_computed: 148,
   started_at: new Date(Date.now() - 1245000).toISOString(),
 };
 
@@ -267,9 +266,11 @@ export const mockApi = {
     };
   },
 
-  async getScheme(schemeCode: string): Promise<MFDSchemeSummary | null> {
+  async getScheme(schemeCode: string): Promise<MFDSchemeSummary> {
     await delay(DELAY_MS);
-    return MOCK_SCHEMES.find(s => s.scheme_code === schemeCode) || null;
+    const scheme = MOCK_SCHEMES.find(s => s.scheme_code === schemeCode);
+    if (!scheme) throw new Error(`Scheme ${schemeCode} not found`);
+    return scheme;
   },
 
   // Scores
@@ -277,8 +278,12 @@ export const mockApi = {
     await delay(DELAY_MS);
     let schemes = filterSchemes(MOCK_SCHEMES, params);
 
-    const scores = schemes.map(s => ({
+    const scores: FundScore[] = schemes.map(s => ({
       scheme_code: s.scheme_code,
+      scheme_name: s.scheme_name,
+      category: s.category,
+      amc: s.amc,
+      benchmark_name: s.benchmark_name,
       fund_health_score: s.fund_health_score,
       category_rank: s.category_rank,
       category_percentile: s.category_percentile,
@@ -307,13 +312,19 @@ export const mockApi = {
     };
   },
 
-  async getScore(schemeCode: string) {
+  async getScore(schemeCode: string): Promise<FundScore> {
     await delay(DELAY_MS);
+    const scheme = MOCK_SCHEMES.find(s => s.scheme_code === schemeCode);
+    if (!scheme) throw new Error(`Scheme ${schemeCode} not found`);
     return {
-      scheme_code: schemeCode,
-      fund_health_score: Math.floor(20 + Math.random() * 75),
-      category_rank: Math.floor(1 + Math.random() * 50),
-      category_percentile: Math.floor(Math.random() * 100),
+      scheme_code: scheme.scheme_code,
+      scheme_name: scheme.scheme_name,
+      category: scheme.category,
+      amc: scheme.amc,
+      benchmark_name: scheme.benchmark_name,
+      fund_health_score: scheme.fund_health_score,
+      category_rank: scheme.category_rank,
+      category_percentile: scheme.category_percentile,
       breakdown: [
         { component: 'benchmark_outperformance', points: Math.floor(Math.random() * 30), max_points: 30, reason: 'Beat benchmark', raw_value: Math.random() * 0.1 },
         { component: 'category_ranking', points: Math.floor(Math.random() * 20), max_points: 20, reason: 'Good rank', raw_value: Math.random() * 100 },

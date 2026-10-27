@@ -3,9 +3,12 @@ End-to-End Integration Test: Complete Fund Monitoring Pipeline
 Demonstrates: Resolution → Ingestion → Features → Rules → Scoring → Output
 """
 
+import io
 import numpy as np
 import pandas as pd
+from contextlib import redirect_stdout
 from datetime import date, timedelta
+from pathlib import Path
 import tempfile
 import os
 
@@ -104,7 +107,7 @@ def run_e2e_pipeline():
     print("=" * 80)
     
     benchmark = BenchmarkResolver(
-        explicit_mapping_path="C:/Users/ariji/Desktop/Shontu AI/fund-engine/resolution/explicit_benchmark_mappings.json"
+        explicit_mapping_path=Path(__file__).resolve().parent / "resolution" / "explicit_benchmark_mappings.json"
     )
     
     # Resolve benchmarks for all schemes
@@ -298,6 +301,19 @@ def run_e2e_pipeline():
         "scores": scores,
         "benchmarks": scheme_benchmarks,
     }
+
+
+def test_end_to_end_pipeline():
+    """Pytest entry point: runs the full pipeline and asserts its invariants."""
+    with redirect_stdout(io.StringIO()):
+        results = run_e2e_pipeline()
+
+    assert results["dedup_stats"]["unique_schemes"] == 10
+    assert len(results["features"]) == 10
+    assert len(results["scores"]) == 10
+    assert len(results["benchmarks"]) == 10
+    assert all(0 <= s.fund_health_score <= 100 for s in results["scores"])
+    assert isinstance(results["alerts"], list)
 
 
 if __name__ == "__main__":

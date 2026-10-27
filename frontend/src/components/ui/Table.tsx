@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, TableHTMLAttributes, ThHTMLAttributes, TdHTMLAttributes } from 'react';
+import { forwardRef, HTMLAttributes, TableHTMLAttributes, ThHTMLAttributes, TdHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
@@ -41,7 +41,7 @@ export const TableBody = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTML
 );
 TableBody.displayName = 'TableBody';
 
-export const TableRow = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTableRowElement>>(
+export const TableRow = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTableRowElement> & { clickable?: boolean }>(
   ({ className, clickable, ...props }, ref) => (
     <tr
       ref={ref}
@@ -57,7 +57,7 @@ export const TableRow = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTable
 );
 TableRow.displayName = 'TableRow';
 
-export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement>>(
+export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement> & { width?: string | number }>(
   ({ className, align = 'left', width, ...props }, ref) => (
     <th
       ref={ref}
