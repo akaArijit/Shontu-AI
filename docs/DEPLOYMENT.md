@@ -177,7 +177,7 @@ Copy `.env.example` for the full list. Never commit real secrets.
 
 `.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
 
-1. **test** — `pytest` (128 tests) + e2e pipeline
+1. **test** — `pytest` (165 tests) + e2e pipeline
 2. **docker-build** — builds the image, pushes to GHCR
 3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
 4. **deploy-*** — optional Railway CLI deploys
@@ -325,22 +325,41 @@ Verify current pricing at https://railway.app/pricing. Supabase remains an optio
 
 ## 15. Current implementation status (read before go-live)
 
-Deployment plumbing is complete; some application layers are still placeholders:
+Deployment plumbing and the data layer are complete:
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 128 tests passing |
-| CSV upload/validation (`/mfd/csv/*`) | ✅ Working (in-memory validation) |
+| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 165 tests passing |
+| CSV upload/validation/persistence (`/mfd/csv/*`) | ✅ Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
+| CSV export (`/mfd/csv/download/scheme-master`) | ✅ Reads `scheme_master`; falls back to the template when the DB is empty |
 | `/health`, `/` | ✅ Working |
 | `/api/v1/mfd/health` | ✅ Queries `pipeline_run_log`; returns `degraded` when DB is empty/unreachable |
-| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | ⚠️ Contract only — return `503 Endpoint not yet wired to the database` |
-| `scripts/run_nightly.py` persistence step | ⚠️ Placeholder — logs "Persisted all results" without writing rows |
-| Frontend | ✅ Builds and runs; shows empty/error states when the API has no data |
+| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | ✅ DB-backed (see `api/repository.py`) |
+| `scripts/run_nightly.py` | ✅ Full orchestration + persistence (`db/persistence.py`, `db/writer.py`) |
+| Frontend | ✅ Builds and runs; shows empty states when the API has no data |
 
-To reach a usable production dashboard you still need to implement:
+### Seeding a fresh deployment
 
-1. **Persistence** in `scripts/run_nightly.py::_run_persistence` (upsert `scheme_master`, `nav_history`, `fund_scores`, `fund_alerts`, `pipeline_run_log`).
-2. **Query layer** for the 503 endpoints in `api/routes/mfd_scores.py` using `api/db.py:get_cursor()`.
+1. Open `/api/v1/docs` and call `POST /api/v1/mfd/csv/upload/scheme-master` with a
+   scheme master CSV (template: `GET /api/v1/mfd/csv/template`). Set
+   `dry_run=true` first to validate.
+2. Optionally override benchmarks with
+   `POST /api/v1/mfd/csv/upload/benchmark-mappings` (`scheme_code,benchmark_code`).
+   Manual mappings are preserved by the nightly resolver.
+3. Run the batch service once (Railway → `fund-engine-batch` → *Run now*). It
+   fetches NAV history from mfapi.in, computes features/rules/scores and writes
+   `fund_rolling_returns`, `fund_scores`, `fund_alerts`, `pipeline_run_log`.
+4. Re-run the frontend only if you changed `NEXT_PUBLIC_*` variables (they are
+   baked in at build time).
 
-Until then, set `NEXT_PUBLIC_USE_MOCK_API=true` on the frontend service to demo the UI with generated data.
+### Known limitations
+
+- `NseIndicesFetcher.fetch_index_history` is still a stub, so benchmark history
+  must be loaded separately (SQL insert or a `benchmark_history` seed script).
+  Alpha/correlation metrics stay empty until that table has rows.
+- Docker is not installed on the development machine, so the Railway image build
+  is validated by CI (GitHub Actions) rather than locally.
+
+Until real data exists, set `NEXT_PUBLIC_USE_MOCK_API=true` on the frontend
+service to demo the UI with generated data.
 

@@ -7,12 +7,30 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from fastapi.responses import StreamingResponse
 import csv
 import io
+import logging
 from typing import List, Optional
 from datetime import date
 from pydantic import BaseModel, validator
 from enum import Enum
 
+from api.db import get_cursor
+from db import persistence
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/mfd/csv", tags=["MFD CSV Upload"])
+
+
+def _persist(callback):
+    """Run a writer callback, translating infrastructure failures into 503s."""
+    try:
+        with get_cursor() as cur:
+            return callback(cur)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.error("CSV persistence failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
 
 
 class SchemeCategory(str, Enum):
@@ -40,6 +58,7 @@ class SchemeCategory(str, Enum):
 
 class SchemeCSVRow(BaseModel):
     """Expected CSV columns for scheme master upload"""
+
     scheme_code: str
     scheme_name: str
     amc: str
@@ -53,11 +72,13 @@ class SchemeCSVRow(BaseModel):
     is_active: bool = True
     short_name: Optional[str] = None  # Short name for display
 
-    @validator('category')
+    @validator("category")
     def validate_category(cls, v):
         valid_categories = [c.value for c in SchemeCategory]
         if v not in valid_categories:
-            raise ValueError(f"Invalid category. Must be one of: {', '.join(valid_categories)}")
+            raise ValueError(
+                f"Invalid category. Must be one of: {', '.join(valid_categories)}"
+            )
         return v
 
 
@@ -67,6 +88,8 @@ class CSVUploadResponse(BaseModel):
     total_rows: int
     valid_rows: int
     invalid_rows: int
+    persisted_rows: int = 0
+    skipped_rows: int = 0
     errors: List[dict] = []
     preview: List[dict] = []
 
@@ -88,14 +111,33 @@ class SchemeMasterExport(BaseModel):
 
 # Expected CSV template
 CSV_TEMPLATE_HEADERS = [
-    "scheme_code", "scheme_name", "amc", "category", "sub_category",
-    "benchmark_index", "fund_manager", "expense_ratio", "aum",
-    "inception_date", "is_active", "short_name"
+    "scheme_code",
+    "scheme_name",
+    "amc",
+    "category",
+    "sub_category",
+    "benchmark_index",
+    "fund_manager",
+    "expense_ratio",
+    "aum",
+    "inception_date",
+    "is_active",
+    "short_name",
 ]
 
 CSV_TEMPLATE_EXAMPLE = [
-    "INF204K01VX3", "HDFC Top 100 Fund", "HDFC Mutual Fund", "Large Cap", "",
-    "NIFTY100_TRI", "Prashant Jain", "1.05", "25000", "2010-01-01", "true", "HDFC Top 100"
+    "INF204K01VX3",
+    "HDFC Top 100 Fund",
+    "HDFC Mutual Fund",
+    "Large Cap",
+    "",
+    "NIFTY100_TRI",
+    "Prashant Jain",
+    "1.05",
+    "25000",
+    "2010-01-01",
+    "true",
+    "HDFC Top 100",
 ]
 
 
@@ -106,14 +148,30 @@ async def download_csv_template():
     writer = csv.writer(output)
     writer.writerow(CSV_TEMPLATE_HEADERS)
     writer.writerow(CSV_TEMPLATE_EXAMPLE)
-    writer.writerow(["INF767K01EW8", "Parag Parikh Flexi Cap Fund", "PPFAS Mutual Fund", "Flexi Cap", "",
-                     "NIFTY500_TRI", "Rajeev Thakkar", "0.95", "18000", "2013-05-01", "true", "PPFCF"])
-    
+    writer.writerow(
+        [
+            "INF767K01EW8",
+            "Parag Parikh Flexi Cap Fund",
+            "PPFAS Mutual Fund",
+            "Flexi Cap",
+            "",
+            "NIFTY500_TRI",
+            "Rajeev Thakkar",
+            "0.95",
+            "18000",
+            "2013-05-01",
+            "true",
+            "PPFCF",
+        ]
+    )
+
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=scheme_master_template.csv"}
+        headers={
+            "Content-Disposition": "attachment; filename=scheme_master_template.csv"
+        },
     )
 
 
@@ -121,164 +179,294 @@ async def download_csv_template():
 async def upload_scheme_master_csv(
     file: UploadFile = File(...),
     dry_run: bool = Query(False, description="Validate only, don't persist"),
-    overwrite: bool = Query(False, description="Overwrite existing schemes")
+    overwrite: bool = Query(False, description="Overwrite existing schemes"),
 ):
     """
     Upload scheme master CSV file.
-    
+
     Expected columns: scheme_code, scheme_name, amc, category, sub_category,
     benchmark_index, fund_manager, expense_ratio, aum, inception_date, is_active, short_name
-    
+
     Returns validation results and preview of parsed data.
     """
-    if not file.filename.endswith('.csv'):
+    if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    
+
     content = await file.read()
     try:
-        content_str = content.decode('utf-8')
+        content_str = content.decode("utf-8")
     except UnicodeDecodeError:
         try:
-            content_str = content.decode('utf-8-sig')  # Handle BOM
+            content_str = content.decode("utf-8-sig")  # Handle BOM
         except UnicodeDecodeError:
-            raise HTTPException(status_code=400, detail="Unable to decode CSV. Ensure UTF-8 encoding.")
-    
+            raise HTTPException(
+                status_code=400, detail="Unable to decode CSV. Ensure UTF-8 encoding."
+            )
+
     # Parse CSV
     reader = csv.DictReader(io.StringIO(content_str))
     rows = list(reader)
-    
+
     # Validate each row
     valid_rows = []
     errors = []
     valid_count = 0
     invalid_count = 0
-    
+
     for idx, row in enumerate(rows, start=1):
         try:
             # Clean empty strings
-            cleaned = {k: v.strip() if isinstance(v, str) else v for k, v in row.items()}
-            
+            cleaned = {
+                k: v.strip() if isinstance(v, str) else v for k, v in row.items()
+            }
+
             # Convert empty strings to None for optional fields
-            for key in ['sub_category', 'benchmark_index', 'fund_manager', 'short_name']:
-                if cleaned.get(key) == '':
+            for key in [
+                "sub_category",
+                "benchmark_index",
+                "fund_manager",
+                "short_name",
+            ]:
+                if cleaned.get(key) == "":
                     cleaned[key] = None
-            
+
             # Convert numeric fields
-            for key in ['expense_ratio', 'aum']:
-                if cleaned.get(key) not in (None, ''):
+            for key in ["expense_ratio", "aum"]:
+                if cleaned.get(key) not in (None, ""):
                     try:
                         cleaned[key] = float(cleaned[key])
                     except ValueError:
                         cleaned[key] = None
-            
+
             # Convert date
-            if cleaned.get('inception_date') not in (None, ''):
+            if cleaned.get("inception_date") not in (None, ""):
                 try:
-                    cleaned['inception_date'] = date.fromisoformat(cleaned['inception_date'])
+                    cleaned["inception_date"] = date.fromisoformat(
+                        cleaned["inception_date"]
+                    )
                 except ValueError:
                     try:
                         # Try DD-MM-YYYY format
-                        cleaned['inception_date'] = date.strptime(cleaned['inception_date'], '%d-%m-%Y')
+                        cleaned["inception_date"] = date.strptime(
+                            cleaned["inception_date"], "%d-%m-%Y"
+                        )
                     except ValueError:
-                        cleaned['inception_date'] = None
-            
+                        cleaned["inception_date"] = None
+
             # Convert boolean
-            if cleaned.get('is_active') not in (None, ''):
-                cleaned['is_active'] = str(cleaned['is_active']).lower() in ('true', '1', 'yes', 'y')
-            
+            if cleaned.get("is_active") not in (None, ""):
+                cleaned["is_active"] = str(cleaned["is_active"]).lower() in (
+                    "true",
+                    "1",
+                    "yes",
+                    "y",
+                )
+
             # Validate with Pydantic
             scheme = SchemeCSVRow(**cleaned)
             valid_rows.append(scheme.dict())
             valid_count += 1
-            
+
         except Exception as e:
-            errors.append({
-                "row": idx,
-                "error": str(e),
-                "data": row
-            })
+            errors.append({"row": idx, "error": str(e), "data": row})
             invalid_count += 1
-    
+
     # Generate preview (first 10 valid rows)
     preview = valid_rows[:10]
-    
-    # If not dry run, persist to database
+
+    # Persist to database unless this is a validation-only request.
+    persisted_count = 0
+    skipped_count = 0
     if not dry_run and valid_count > 0:
-        # TODO: Implement database persistence
-        # This would use the SchemeDeduplicator to register schemes
-        pass
-    
+
+        def _write(cur):
+            codes = [row["scheme_code"] for row in valid_rows]
+            existing = set()
+            if not overwrite:
+                cur.execute(
+                    "SELECT scheme_code FROM scheme_master WHERE scheme_code = ANY(%(codes)s)",
+                    {"codes": codes},
+                )
+                existing = {row["scheme_code"] for row in cur.fetchall()}
+
+            benchmarks = {
+                row["benchmark_index"]: {
+                    "benchmark_code": row["benchmark_index"],
+                    "benchmark_name": row["benchmark_index"],
+                    "category": row["category"],
+                }
+                for row in valid_rows
+                if row.get("benchmark_index")
+            }
+            persistence.upsert_benchmarks(cur, list(benchmarks.values()))
+
+            new_rows = [row for row in valid_rows if row["scheme_code"] not in existing]
+            written = persistence.upsert_schemes(cur, new_rows)
+            return written, len(valid_rows) - written
+
+        persisted_count, skipped_count = _persist(_write)
+
+    message = (
+        f"Processed {len(rows)} rows: {valid_count} valid, {invalid_count} invalid"
+    )
+    if not dry_run:
+        message += f", {persisted_count} persisted, {skipped_count} skipped"
+
     return CSVUploadResponse(
         success=invalid_count == 0,
-        message=f"Processed {len(rows)} rows: {valid_count} valid, {invalid_count} invalid",
+        message=message,
         total_rows=len(rows),
         valid_rows=valid_count,
         invalid_rows=invalid_count,
+        persisted_rows=persisted_count,
+        skipped_rows=skipped_count,
         errors=errors,
-        preview=preview
+        preview=preview,
     )
 
 
 @router.get("/download/scheme-master")
 async def download_scheme_master():
-    """Download current scheme master as CSV"""
-    # TODO: Fetch from database
-    # For now, return template with example data
+    """Download current scheme master as CSV (falls back to the template)."""
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(CSV_TEMPLATE_HEADERS)
-    writer.writerow(CSV_TEMPLATE_EXAMPLE)
-    
+
+    try:
+        with get_cursor() as cur:
+            cur.execute("""
+                SELECT scheme_code, scheme_name, amc, category, sub_category,
+                       benchmark_index, fund_manager, expense_ratio, aum,
+                       inception_date, is_active
+                FROM scheme_master
+                ORDER BY scheme_code
+                """)
+            rows = cur.fetchall()
+    except Exception as exc:  # noqa: BLE001 - export should still return a template
+        logger.warning("Scheme master export falling back to template: %s", exc)
+        rows = []
+
+    if rows:
+        for row in rows:
+            writer.writerow(
+                [
+                    row["scheme_code"],
+                    row["scheme_name"],
+                    row["amc"],
+                    row["category"],
+                    row["sub_category"] or "",
+                    row["benchmark_index"] or "",
+                    row["fund_manager"] or "",
+                    row["expense_ratio"] if row["expense_ratio"] is not None else "",
+                    row["aum"] if row["aum"] is not None else "",
+                    row["inception_date"].isoformat() if row["inception_date"] else "",
+                    "true" if row["is_active"] else "false",
+                    "",
+                ]
+            )
+    else:
+        writer.writerow(CSV_TEMPLATE_EXAMPLE)
+
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=scheme_master_export.csv"}
+        headers={
+            "Content-Disposition": "attachment; filename=scheme_master_export.csv"
+        },
     )
 
 
 @router.post("/upload/benchmark-mappings")
 async def upload_benchmark_mappings_csv(
-    file: UploadFile = File(...),
-    dry_run: bool = Query(False)
+    file: UploadFile = File(...), dry_run: bool = Query(False)
 ):
     """
     Upload explicit benchmark mappings CSV.
     Expected columns: scheme_code, benchmark_code
     """
-    if not file.filename.endswith('.csv'):
+    if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    
+
     content = await file.read()
-    content_str = content.decode('utf-8')
-    
+    content_str = content.decode("utf-8")
+
     reader = csv.DictReader(io.StringIO(content_str))
     rows = list(reader)
-    
+
     valid = []
     errors = []
-    
+
     for idx, row in enumerate(rows, start=1):
         try:
-            scheme_code = row.get('scheme_code', '').strip()
-            benchmark_code = row.get('benchmark_code', '').strip()
-            
+            scheme_code = row.get("scheme_code", "").strip()
+            benchmark_code = row.get("benchmark_code", "").strip()
+
             if not scheme_code or not benchmark_code:
-                errors.append({"row": idx, "error": "Missing scheme_code or benchmark_code", "data": row})
+                errors.append(
+                    {
+                        "row": idx,
+                        "error": "Missing scheme_code or benchmark_code",
+                        "data": row,
+                    }
+                )
                 continue
-            
+
             valid.append({"scheme_code": scheme_code, "benchmark_code": benchmark_code})
         except Exception as e:
             errors.append({"row": idx, "error": str(e), "data": row})
-    
+
+    persisted_count = 0
+    skipped_count = 0
+
+    if not dry_run and valid:
+
+        def _write(cur):
+            codes = [row["scheme_code"] for row in valid]
+            cur.execute(
+                "SELECT scheme_code FROM scheme_master WHERE scheme_code = ANY(%(codes)s)",
+                {"codes": codes},
+            )
+            known = {row["scheme_code"] for row in cur.fetchall()}
+
+            applicable = [row for row in valid if row["scheme_code"] in known]
+            benchmarks = {
+                row["benchmark_code"]: {
+                    "benchmark_code": row["benchmark_code"],
+                    "benchmark_name": row["benchmark_code"],
+                    "category": None,
+                }
+                for row in applicable
+            }
+            persistence.upsert_benchmarks(cur, list(benchmarks.values()))
+            persistence.update_scheme_benchmarks(
+                cur,
+                [
+                    {
+                        "scheme_code": row["scheme_code"],
+                        "benchmark_index": row["benchmark_code"],
+                    }
+                    for row in applicable
+                ],
+            )
+            return len(applicable), len(valid) - len(applicable)
+
+        persisted_count, skipped_count = _persist(_write)
+
+    message = f"Processed {len(rows)} rows: {len(valid)} valid, {len(errors)} invalid"
+    if not dry_run:
+        message += f", {persisted_count} applied, {skipped_count} unknown schemes"
+
     return {
         "success": len(errors) == 0,
-        "message": f"Processed {len(rows)} rows: {len(valid)} valid, {len(errors)} invalid",
+        "message": message,
         "total_rows": len(rows),
         "valid_rows": len(valid),
         "invalid_rows": len(errors),
+        "persisted_rows": persisted_count,
+        "skipped_rows": skipped_count,
         "errors": errors,
-        "mappings": valid if not dry_run else valid[:10]
+        "mappings": valid if not dry_run else valid[:10],
     }
 
 

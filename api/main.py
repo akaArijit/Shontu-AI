@@ -14,8 +14,7 @@ from api.routes import mfd_scores, csv_upload
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 # CORS configuration for internal MFD dashboard
@@ -72,7 +71,7 @@ async def root():
         "service": "MFD Fund Monitoring API",
         "version": "1.0.0",
         "status": "operational",
-        "docs": "/docs"
+        "docs": "/docs",
     }
 
 
@@ -82,16 +81,13 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "mfd-fund-monitoring-api",
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
-        "api.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
+        "api.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info"
     )
