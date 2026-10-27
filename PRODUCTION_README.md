@@ -203,11 +203,17 @@ python test_e2e_pipeline.py
 
 ## 📦 Deployment
 
-### Render (Recommended)
-1. Connect GitHub repo
-2. Create **Web Service** (API) from `Dockerfile`
-3. Create **Cron Job** (Batch) from `Dockerfile`, schedule `0 2 * * *`
-4. Add environment variables from `.env.example`
+### Railway (Recommended)
+1. Railway → **New Project** → **Deploy from GitHub repo** (`akaArijit/Shontu-AI`)
+2. Add **PostgreSQL** plugin, then run `db/migrations/*.sql` in order
+3. Create three services from the same repo:
+   - `fund-engine-api` — root `/`, Dockerfile builder, healthcheck `/health`
+   - `fund-engine-batch` — root `/`, Dockerfile, start `python scripts/run_nightly.py`, cron `0 2 * * *`, restart policy **Never**
+   - `fund-engine-web` — root `/frontend`, Nixpacks, start `npx next start -p ${PORT:-3000}`
+4. Add variables from `.env.example` (use `DATABASE_URL=${{Postgres.DATABASE_URL}}`)
+5. Set `NEXT_PUBLIC_API_URL` to the API domain, then set `ALLOWED_ORIGINS` on the API to the frontend domain
+
+Repo config: `railway.json` (API/batch) and `frontend/railway.json` (web). Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### Database Migrations
 ```bash
@@ -219,7 +225,8 @@ psql $DATABASE_URL -f db/migrations/004_mfd_views.sql
 
 ### CI/CD
 GitHub Actions workflow (`.github/workflows/ci-cd.yml`):
-- Tests → Docker Build → Deploy API → Deploy Batch → Run Migrations
+- Tests → Docker Build → Optional Railway CLI Deploys → Run Migrations
+- Default deploys come from Railway's GitHub integration on `master`
 
 ---
 

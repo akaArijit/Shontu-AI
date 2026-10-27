@@ -57,7 +57,7 @@ jobs:
     name: Build Docker Image
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -94,54 +94,78 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ============================================================
-  # DEPLOY TO RENDER (API)
+  # DEPLOY TO RAILWAY
+  # Recommended: connect each Railway service to this repo (Settings →
+  # Source) and let Railway auto-deploy on push to the tracked branch.
+  # The CLI jobs below are optional; set repo variable
+  # RAILWAY_CLI_DEPLOY=true (plus RAILWAY_TOKEN secret) to use them.
   # ============================================================
   deploy-api:
-    name: Deploy API to Render
+    name: Deploy API to Railway (optional)
     needs: docker-build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master' && vars.RAILWAY_CLI_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Render
-        uses: render/actions/deploy@v1
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          service-id: ${{ secrets.RENDER_API_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
-          wait-for-success: true
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Deploy API service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_API_SERVICE }}
+        run: npx --yes @railway/cli up --ci --service "$RAILWAY_SERVICE"
 
   # ============================================================
-  # DEPLOY TO RENDER (BATCH CRON)
+  # DEPLOY BATCH / CRON SERVICE TO RAILWAY
   # ============================================================
   deploy-batch:
-    name: Deploy Batch Job to Render
+    name: Deploy Batch Job to Railway (optional)
     needs: docker-build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master' && vars.RAILWAY_CLI_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Render
-        uses: render/actions/deploy@v1
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          service-id: ${{ secrets.RENDER_BATCH_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
-          wait-for-success: true
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Deploy batch service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_BATCH_SERVICE }}
+        run: npx --yes @railway/cli up --ci --service "$RAILWAY_SERVICE"
 
   # ============================================================
-  # DEPLOY TO VERCEL (FRONTEND - if separate repo)
+  # DEPLOY FRONTEND TO RAILWAY
   # ============================================================
   deploy-frontend:
-    name: Deploy Frontend to Vercel
+    name: Deploy Frontend to Railway (optional)
     needs: docker-build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master' && vars.RAILWAY_CLI_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./frontend
-          vercel-args: '--prod'
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Deploy frontend service
+        working-directory: ./frontend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_FRONTEND_SERVICE }}
+        run: npx --yes @railway/cli up --ci --service "$RAILWAY_SERVICE"
 
   # ============================================================
   # DATABASE MIGRATIONS
@@ -149,7 +173,7 @@ jobs:
   migrate-db:
     name: Run Database Migrations
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -177,7 +201,7 @@ jobs:
   # ============================================================
   notify:
     name: Send Notification
-    needs: [deploy-api, deploy-batch, migrate-db]
+    needs: [deploy-api, deploy-batch, deploy-frontend, migrate-db]
     if: always()
     runs-on: ubuntu-latest
     env:

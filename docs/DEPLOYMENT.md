@@ -1,454 +1,322 @@
-# Deployment Guide
+# Deployment Guide — Railway
 
-## Overview
+Everything runs on [Railway](https://railway.app): PostgreSQL, the FastAPI backend, the nightly batch job, and the Next.js dashboard.
 
-| Component | Technology | Hosting |
-|-----------|------------|---------|
-| Database | PostgreSQL 15 | Supabase |
-| Batch Jobs | Python 3.11 | Render Cron Jobs |
-| API Server | Node.js 18 / Express | Render Web Service |
-| Frontend | Next.js 14 | Vercel |
-| File Storage | S3-compatible | Supabase Storage |
+| Component | Technology | Railway service | Root directory |
+|-----------|------------|-----------------|----------------|
+| Database | PostgreSQL 15 | Postgres plugin | — |
+| API | Python 3.11 / FastAPI | `fund-engine-api` (Dockerfile) | `/` |
+| Batch job | Python 3.11 (cron) | `fund-engine-batch` (Dockerfile) | `/` |
+| Frontend | Next.js 14 | `fund-engine-web` (Nixpacks) | `/frontend` |
+
+Config files already in the repo:
+
+- `railway.json` — API service build (Dockerfile) + `/health` healthcheck + restart policy
+- `frontend/railway.json` — Nixpacks build, `next start` on `$PORT`
+- `Dockerfile` — installs both `requirements.txt` and `api/requirements.txt`, binds `$PORT`
 
 ---
 
 ## Prerequisites
 
-### Accounts Required
-- [Supabase](https://supabase.com) — PostgreSQL database
-- [Render](https://render.com) — Batch jobs + API
-- [Vercel](https://vercel.com) — Frontend
-- [GitHub](https://github.com) — Source control
+- [Railway account](https://railway.app) + [Railway CLI](https://docs.railway.app/guides/cli) (`npm i -g @railway/cli`)
+- GitHub repo connected: https://github.com/akaArijit/Shontu-AI
+- `psql` locally (optional, for migrations)
 
-### Local Development
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-cd api && npm install
-
-# Start local dev
-docker-compose up -d  # PostgreSQL
-python scripts/run_dev.py
+railway login
 ```
 
 ---
 
-## Infrastructure Setup
+## 1. Create the project and database
 
-### 1. Supabase Database
+1. Railway → **New Project** → **Deploy from GitHub repo** → pick `Shontu-AI`.
+2. In the project canvas: **New** → **Database** → **Add PostgreSQL**.
+3. Railway creates `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` on the Postgres service.
 
-Create new project → Note credentials:
-```
-DATABASE_URL=postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
-SUPABASE_URL=https://<ref>.supabase.co
-SUPABASE_ANON_KEY=<anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-```
+Run migrations against it (in order):
 
-Run migrations:
 ```bash
-# From project root
-psql $DATABASE_URL -f db/migrations/001_initial_schema.sql
-psql $DATABASE_URL -f db/migrations/002_indexes.sql
-psql $DATABASE_URL -f db/migrations/003_views.sql
+railway link                      # select project
+railway service Postgres
+railway run psql "$DATABASE_URL" -f db/migrations/001_initial_schema.sql
+railway run psql "$DATABASE_URL" -f db/migrations/002_indexes.sql
+railway run psql "$DATABASE_URL" -f db/migrations/003_views.sql
+railway run psql "$DATABASE_URL" -f db/migrations/004_mfd_views.sql
 ```
 
-### 2. Render Services
-
-#### Batch Job (Cron)
-1. New → Cron Job
-2. Connect GitHub repo
-3. Settings:
-   - **Name**: `fund-engine-batch`
-   - **Schedule**: `0 2 * * *` (2 AM UTC = 7:30 AM IST)
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `python scripts/run_nightly.py`
-   - **Environment**: Add all env vars below
-
-#### API Server (Web Service)
-1. New → Web Service
-2. Connect GitHub repo → `api/` directory
-3. Settings:
-   - **Name**: `fund-engine-api`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-   - **Environment**: Node 18
-   - **Auto-Deploy**: Yes
-
-### 3. Vercel Frontend
-1. Import GitHub repo → `frontend/` directory
-2. Framework: Next.js (auto-detected)
-3. Environment Variables: Add `NEXT_PUBLIC_API_URL`
-4. Deploy
+Or from the Postgres service shell: `railway connect Postgres` then `\i db/migrations/001_initial_schema.sql`.
 
 ---
 
-## Environment Variables
+## 2. API service
 
-### Batch Job (Render)
+If the GitHub import created a service from the repo root, rename it `fund-engine-api` and confirm:
+
+| Setting | Value |
+|---------|-------|
+| Source repo / branch | `akaArijit/Shontu-AI` / `master` |
+| Root directory | `/` (repo root) |
+| Builder | Dockerfile (from `railway.json`) |
+| Healthcheck path | `/health` |
+| Start command | `sh -c 'uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2'` |
+
+Variables (Settings → Variables):
+
 ```bash
-# Database
-DATABASE_URL=postgresql://...
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=xxx
-
-# External APIs
-MFAPI_BASE_URL=https://api.mfapi.in/mf
-NSE_API_KEY=xxx
-RBI_SCRAPER_ENABLED=true
-
-# Config
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=                      # optional; leave blank if unused
 SCORING_CONFIG_PATH=/app/config/scoring_config.yaml
 RULES_CONFIG_PATH=/app/config/rules.yaml
 BENCHMARK_MAPPINGS_PATH=/app/config/explicit_benchmark_mappings.json
-
-# Operational
 LOG_LEVEL=info
 TIMEZONE=Asia/Kolkata
+JWT_SECRET=<generate-a-long-random-string>
+API_KEY_SALT=<generate-a-long-random-string>
+ALLOWED_ORIGINS=https://<your-frontend-domain>
+MFAPI_BASE_URL=https://api.mfapi.in/mf
+```
+
+Generate secrets: `openssl rand -hex 32`.
+
+Then **Settings → Networking → Generate Domain**. Verify:
+
+```bash
+curl https://<api-domain>/health
+# {"status":"healthy","service":"mfd-fund-monitoring-api","version":"1.0.0"}
+curl https://<api-domain>/docs     # OpenAPI UI
+```
+
+> `railway.json` sets `healthcheckPath: /health`, so Railway only promotes a deploy once the app answers 200 there.
+
+---
+
+## 3. Frontend service
+
+**New** → **GitHub Repo** → same repo, then:
+
+| Setting | Value |
+|---------|-------|
+| Service name | `fund-engine-web` |
+| Root directory | `/frontend` |
+| Builder | Nixpacks (`frontend/railway.json`) |
+| Build command | `npm ci && npm run build` |
+| Start command | `npx next start -p ${PORT:-3000}` |
+| Healthcheck path | `/` |
+
+Variables:
+
+```bash
+NEXT_PUBLIC_API_URL=https://<your-api-domain>
+NEXT_PUBLIC_USE_MOCK_API=false
+NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>
+```
+
+`NEXT_PUBLIC_*` values are baked in at build time — after changing them, trigger a redeploy (**Deploy → Redeploy**, or push a commit).
+
+Then generate a domain, and finally set the API's `ALLOWED_ORIGINS` to that exact origin (scheme `https://`, no trailing slash) and redeploy the API.
+
+> The app calls `NEXT_PUBLIC_API_URL + /api/v1/...`, so set the bare domain (no `/api/v1` suffix).
+
+---
+
+## 4. Nightly batch / cron service
+
+**New** → **GitHub Repo** → same repo (repo root, Dockerfile builder), name it `fund-engine-batch`.
+
+| Setting | Value |
+|---------|-------|
+| Root directory | `/` |
+| Builder | Dockerfile |
+| Start command | `python scripts/run_nightly.py` |
+| Cron schedule | `0 2 * * *` (02:00 UTC = 07:30 IST) |
+| Restart policy | Never (cron services should exit) |
+
+Variables: same as the API plus:
+
+```bash
 PIPELINE_TIMEOUT_SECONDS=1800
+INGESTION_MAX_RETRIES=3
+INGESTION_RETRY_DELAY_SECONDS=5
 ```
 
-### API Server (Render)
+Keep **Restart policy = Never** and enable **Cron Schedule**; otherwise Railway restarts the container after each successful run. Logs land in the service's **Deployments → Logs**, and nightly files in `logs/`.
+
+Trigger a manual run: **Deploy → Redeploy**, or locally:
+
 ```bash
-# Database
-DATABASE_URL=postgresql://...
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=xxx
-
-# Auth
-JWT_SECRET=xxx
-API_KEY_SALT=xxx
-
-# CORS
-ALLOWED_ORIGINS=https://app.fundmonitor.example.com,https://fundmonitor.example.com
-
-# Rate Limiting
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX_REQUESTS=60
+railway link
+railway service fund-engine-batch
+railway run python scripts/run_nightly.py --date 2026-10-27
 ```
 
-### Frontend (Vercel)
+---
+
+## 5. Environment variable reference
+
+| Variable | API | Batch | Frontend | Notes |
+|----------|-----|-------|----------|-------|
+| `DATABASE_URL` | ✅ | ✅ | — | `${{Postgres.DATABASE_URL}}` |
+| `PORT` | auto | auto | auto | Injected by Railway |
+| `ALLOWED_ORIGINS` | ✅ | — | — | Frontend origin(s), comma-separated |
+| `JWT_SECRET` / `API_KEY_SALT` | ✅ | — | — | Rotate quarterly |
+| `SCORING_CONFIG_PATH` | ✅ | ✅ | — | `/app/config/scoring_config.yaml` |
+| `RULES_CONFIG_PATH` | ✅ | ✅ | — | `/app/config/rules.yaml` |
+| `BENCHMARK_MAPPINGS_PATH` | ✅ | ✅ | — | `…explicit_benchmark_mappings.json` |
+| `NEXT_PUBLIC_API_URL` | — | — | ✅ | Build-time |
+| `NEXT_PUBLIC_USE_MOCK_API` | — | — | ✅ | `false` in production |
+| `MFAPI_BASE_URL` | ✅ | ✅ | — | `https://api.mfapi.in/mf` |
+| `PIPELINE_TIMEOUT_SECONDS` | — | ✅ | — | Default 1800 |
+
+Copy `.env.example` for the full list. Never commit real secrets.
+
+---
+
+## 6. CI/CD
+
+`.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
+
+1. **test** — `pytest` (128 tests) + e2e pipeline
+2. **docker-build** — builds the image, pushes to GHCR
+3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
+4. **deploy-*** — optional Railway CLI deploys
+
+**Default (recommended): Railway auto-deploy.** In each service: **Settings → Source → Connected branch = `master`**. Every push deploys automatically after CI is green, with zero extra secrets.
+
+**Optional: deploy from CI.** Set repository variable `RAILWAY_CLI_DEPLOY=true` and secrets:
+
+| Secret | Value |
+|--------|-------|
+| `RAILWAY_TOKEN` | Project token (Project Settings → Tokens) |
+| `RAILWAY_API_SERVICE` | API service name, e.g. `fund-engine-api` |
+| `RAILWAY_BATCH_SERVICE` | `fund-engine-batch` |
+| `RAILWAY_FRONTEND_SERVICE` | `fund-engine-web` |
+| `DATABASE_URL` | Postgres public URL (for migrations) |
+
 ```bash
-NEXT_PUBLIC_API_URL=https://fund-engine-api.onrender.com/api/v1
-NEXT_PUBLIC_APP_URL=https://fundmonitor.example.com
+gh variable set RAILWAY_CLI_DEPLOY --body true
+gh secret set RAILWAY_TOKEN
 ```
 
 ---
 
-## Database Migrations
+## 7. Monitoring
 
-### Migration Files
-```
-db/migrations/
-├── 001_initial_schema.sql      # Core tables
-├── 002_indexes.sql             # Performance indexes
-├── 003_views.sql               # Materialized views
-├── 004_rls_policies.sql        # Row-level security
-└── 005_functions.sql           # Helper functions
-```
+### Railway built-ins
+- **Deployments → Logs** — structured app logs per service
+- **Metrics** — CPU, memory, network, restart counts
+- **Healthchecks** — `/health` for API, `/` for frontend; failed checks block promotion
+- **Alerts** — Project Settings → Alerts → email/webhook on deploy failure or resource spikes
 
-### Running Migrations
+### Application-level checks
 ```bash
-# Manual
-psql $DATABASE_URL -f db/migrations/001_initial_schema.sql
-
-# Automated (in batch job startup)
-python -m db.migrate
+curl https://<api-domain>/health          # process alive
+curl https://<api-domain>/api/v1/mfd/health   # pipeline freshness
 ```
 
-### Key Tables & Indexes
-
-```sql
--- Primary lookup indexes
-CREATE INDEX idx_nav_history_scheme_date ON nav_history(scheme_code, nav_date DESC);
-CREATE INDEX idx_benchmark_history_code_date ON benchmark_history(benchmark_code, index_date DESC);
-CREATE INDEX idx_fund_scores_scheme_date ON fund_scores(scheme_code, as_of_date DESC);
-CREATE INDEX idx_fund_alerts_scheme_date ON fund_alerts(scheme_code, triggered_on DESC);
-CREATE INDEX idx_client_folios_client ON client_folios(client_id);
-
--- Composite for portfolio queries
-CREATE INDEX idx_folios_client_scheme ON client_folios(client_id, scheme_code);
-```
-
----
-
-## Configuration Files
-
-### Scoring Config (`config/scoring_config.yaml`)
-```yaml
-version: "1.0"
-effective_date: "2024-01-01"
-components:
-  benchmark_outperformance:
-    weight: 0.30
-    max_points: 30
-    scale_type: "alpha_threshold"
-    scale_params:
-      alpha_1y_thresholds:
-        - [0.05, 30]
-        - [0.02, 20]
-        - [0.0, 10]
-        - [-0.02, 5]
-        - [-0.05, 0]
-  # ... other components
-penalty_per_month: 2.0
-penalty_cap: 20.0
-```
-
-### Rules Config (`config/rules.yaml`)
-```yaml
-alert_rules:
-  - id: underperform_3m
-    alert_type: underperform_3m
-    condition: "consecutive_underperf_months >= 3"
-    severity: medium
-    description: "Fund underperformed benchmark for 3+ consecutive months"
-    category_overrides: {}
-  # ... 8 more rules
-```
-
-### Benchmark Mappings (`config/explicit_benchmark_mappings.json`)
-```json
-{
-  "INF204K01VX3": "NIFTY100_TRI",
-  "INF767K01EW8": "NIFTY500_TRI",
-  "INF179K01BE2": "NIFTY_MIDCAP150_TRI"
-}
-```
-
----
-
-## CI/CD Pipeline
-
-### GitHub Actions (`.github/workflows/deploy.yml`)
-
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: pip install -r requirements.txt
-      - run: python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
-
-  deploy-api:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: render/actions/deploy@v1
-        with:
-          service-id: ${{ secrets.RENDER_API_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
-
-  deploy-frontend:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./frontend
-```
-
----
-
-## Monitoring & Alerts
-
-### Render Dashboards
-- **Batch Job**: Logs, runtime, success/failure
-- **API**: Request latency, error rate, throughput
-- **Database**: Connections, query performance, storage
-
-### Custom Alerts (Render)
 | Alert | Condition |
 |-------|-----------|
-| Batch job failed | Status = failed |
-| Batch job timeout | Runtime > 30 min |
-| API error rate | > 5% over 5 min |
-| API p99 latency | > 2 seconds |
-| DB connections | > 80% of max |
-| Data freshness | fund_scores.max(as_of_date) < today-1 |
-
-### Supabase Alerts
-- Database size > 80%
-- CPU > 80%
-- Replication lag > 1 min
+| API down | `/health` != 200 for 2 min |
+| Batch failed | cron run exit code != 0 |
+| Stale data | `max(fund_scores.as_of_date) < today - 1` |
+| Error rate | 5xx > 5% over 5 min (Railway metrics) |
 
 ---
 
-## Backup & Recovery
+## 8. Backups & recovery
 
-### Automated (Supabase)
-- Daily point-in-time recovery (7 days)
-- Weekly full backups (4 weeks)
-- Monthly full backups (12 months)
+Railway Postgres supports scheduled backups on paid plans (Project → Postgres → Backups). Also take manual dumps:
 
-### Manual Backup
 ```bash
-# Schema + data
-pg_dump $DATABASE_URL --no-owner --no-acl > backup_$(date +%Y%m%d).sql
-
-# Restore
-psql $DATABASE_URL < backup_20240115.sql
+railway service Postgres
+railway run pg_dump "$DATABASE_URL" --no-owner --no-acl > backup_$(date +%Y%m%d).sql
 ```
 
-### RTO/RPO Targets
-| Metric | Target |
-|--------|--------|
-| RTO (Recovery Time Objective) | < 2 hours |
-| RPO (Recovery Point Objective) | < 24 hours |
+Restore:
 
----
-
-## Security
-
-### Network
-- All Render services in private network
-- Supabase: IP allowlist (Render IPs only)
-- Vercel: Edge network, DDoS protection
-
-### Data
-- TLS 1.3 everywhere
-- Database: Encryption at rest (Supabase default)
-- API keys: Rotated quarterly
-- JWT: RS256, 15-min expiry, refresh tokens
-
-### Secrets Management
-- Never commit secrets to Git
-- Use Render/ Vercel environment variables
-- Rotate: `RENDER_API_KEY`, `VERCEL_TOKEN`, `JWT_SECRET`, `DATABASE_URL`
-
----
-
-## Scaling Strategy
-
-### Current Capacity (Estimated)
-| Component | Capacity | Scaling Trigger |
-|-----------|----------|-----------------|
-| Batch Job | 500 schemes | Runtime > 20 min → parallelize |
-| API | 1000 RPS | CPU > 70% → horizontal |
-| DB | 100 GB | Storage > 80% → upgrade |
-
-### Horizontal Scaling (Future)
-```python
-# Parallelize feature engineering
-from multiprocessing import Pool
-
-def compute_scheme_features(args):
-    scheme_code, nav_series, as_of_date = args
-    return pipeline._compute_scheme_features(...)
-
-with Pool(4) as p:
-    features = p.map(compute_scheme_features, scheme_args)
-```
-
----
-
-## Rollback Procedure
-
-### API Rollback
 ```bash
-# Render: Dashboard → Deploys → Rollback to previous
-# Or CLI
-render deploy rollback --service-id $SERVICE_ID --deploy-id $PREVIOUS_DEPLOY_ID
+railway run psql "$DATABASE_URL" < backup_20261027.sql
 ```
 
-### Database Rollback
-```bash
-# Point-in-time recovery (Supabase Dashboard)
-# Or restore from backup
-psql $DATABASE_URL < backup_20240114.sql
-```
-
-### Config Rollback
-```bash
-# Revert config files in Git, redeploy
-git revert <commit-hash>
-git push origin main
-```
+Targets: RTO < 2 h, RPO < 24 h. Keep the last 7 daily + 4 weekly dumps in object storage.
 
 ---
 
-## Troubleshooting
+## 9. Security
 
-### Batch Job Failures
+- Services communicate over Railway's private network — use `${{Postgres.DATABASE_URL}}`, not the public proxy, from API/batch
+- Only the frontend domain should be public; keep the API behind HTTPS + `ALLOWED_ORIGINS`
+- TLS terminated by Railway for all generated domains
+- Postgres: encryption at rest, no public access unless you enable TCP Proxy
+- Secrets only in Railway variables; rotate `JWT_SECRET`, `API_KEY_SALT`, `RAILWAY_TOKEN` quarterly
+- Non-root container user (`appuser`) in `Dockerfile`
 
-| Symptom | Likely Cause | Fix |
+---
+
+## 10. Scaling
+
+| Component | Capacity | Trigger |
+|-----------|----------|---------|
+| API | ~1000 RPS | CPU > 70% → raise replicas (Railway: Settings → Replicas) |
+| Batch | 500 schemes in ~20 min | runtime > 20 min → parallelise feature engineering |
+| Postgres | 100 GB | storage > 80% → upgrade plan |
+
+`railway.json` pins `numReplicas: 1`; scale via the dashboard when needed.
+
+---
+
+## 11. Rollback
+
+- **Service rollback**: Deployments → pick previous successful deploy → **Redeploy**
+- **CLI**: `railway rollback` (interactive) or `railway redeploy --service <name>`
+- **Code**: `git revert <sha> && git push` (Railway redeploys automatically)
+- **Database**: restore the last dump (no automatic PITR on the free tier)
+
+---
+
+## 12. Troubleshooting
+
+| Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Timeout | Too many schemes | Parallelize feature engineering |
-| AMFI fetch failed | Network/rate limit | Increase retry, add delay |
-| mfapi 429 | Rate limit | Increase delay between calls |
-| Memory error | Large NAV series | Chunk processing |
-
-### API Issues
-
-| Symptom | Fix |
-|---------|-----|
-| 500 errors | Check Render logs, DB connection |
-| Slow queries | Add missing indexes |
-| CORS errors | Check `ALLOWED_ORIGINS` |
-| Auth failures | Verify JWT_SECRET, token expiry |
-
-### Data Quality
-
-| Issue | Detection | Fix |
-|-------|-----------|-----|
-| Missing NAV | `nav_history` gaps | Re-run ingestion for date |
-| Wrong benchmark | Low confidence alerts | Update explicit mappings |
-| Score anomalies | Alert on score delta > 20 | Check feature inputs |
+| Deploy fails at healthcheck | App not binding `$PORT` | Keep the `--port ${PORT:-8000}` start command |
+| `502` on API domain | Container crashed on boot | Check Logs; usually missing `python-multipart`, `DATABASE_URL`, or a bad import |
+| CORS error in browser | `ALLOWED_ORIGINS` mismatch | Set exact origin incl. scheme, then redeploy API |
+| Frontend shows zeros / mock data | `NEXT_PUBLIC_USE_MOCK_API=true` or API URL stale | Fix variable, **rebuild** (values are inlined) |
+| `railway up` uploads `node_modules` | `.gitignore` not respected | Ensure `frontend/node_modules` and `.next` stay ignored |
+| Cron runs every few minutes | Restart policy not `Never` | Settings → Restart Policy → Never |
+| Migrations not applied | `migrate-db` skipped | Run the `psql` commands above manually |
+| Slow dashboard | Missing indexes | Re-run `db/migrations/002_indexes.sql` |
 
 ---
 
-## Runbook: Common Operations
+## 13. Operations runbook
 
-### Add New Scheme
-```sql
-INSERT INTO scheme_master (scheme_code, scheme_name, amc, category, ...)
-VALUES ('NEW_SCHEME_001', 'New Fund Name', 'New AMC', 'Large Cap', ...);
-```
-
-### Update Benchmark Mapping
-```bash
-# Edit config/explicit_benchmark_mappings.json
-# Deploy batch job (auto-reloads on next run)
-```
-
-### Retune Scoring Weights
-```bash
-# 1. Edit config/scoring_config.yaml (new version/date)
-# 2. Test locally: python -m scoring.test_scoring_engine
-# 3. Deploy batch job
-```
-
-### Emergency: Disable Alert Rule
-```yaml
-# config/rules.yaml
-- id: high_volatility
-  enabled: false  # Temporarily disable
-```
+| Task | Command |
+|------|---------|
+| Run pipeline manually | `railway run python scripts/run_nightly.py` |
+| Retune scoring weights | Edit `config/scoring_config.yaml` → push (auto-redeploy batch) |
+| Add alert rule | Edit `config/rules.yaml` → push |
+| Update benchmark mapping | Edit `config/explicit_benchmark_mappings.json` → push |
+| Refresh materialized views | `railway run psql "$DATABASE_URL" -c "SELECT refresh_mfd_materialized_views();"` |
+| Check pipeline health | `curl https://<api-domain>/api/v1/mfd/health` |
+| Tail logs | `railway logs --service fund-engine-api` |
+| Open a DB shell | `railway connect Postgres` |
+| List variables | `railway variables --service fund-engine-api` |
 
 ---
 
-## Cost Estimation (Monthly)
+## 14. Cost estimate
 
-| Service | Tier | Est. Cost |
-|---------|------|-----------|
-| Supabase | Pro | $25 |
-| Render Cron | Standard | $7 |
-| Render Web | Standard | $7 |
-| Vercel | Pro | $20 |
-| **Total** | | **~$59/month** |
+Railway bills by usage (vCPU-minutes, GB-minutes, egress) plus plan fee; Postgres counts as a service.
 
-*Scales with usage. Enterprise features add ~$200/month.*
+| Item | Approx. monthly |
+|------|-----------------|
+| Hobby plan (includes usage credit) | $5 |
+| API service (small, always on) | $3–8 |
+| Frontend service | $2–6 |
+| Batch cron (≤ 300 runs-min/day) | $1–3 |
+| Postgres (1 GB) | ~$2–5 |
+| **Total** | **~$13–27** |
+
+Verify current pricing at https://railway.app/pricing. Supabase remains an option if you prefer a managed DB with PITR — point `DATABASE_URL` at it and skip the Postgres plugin.

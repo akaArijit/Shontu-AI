@@ -361,11 +361,11 @@ GET /api/v1/clients/{client_id}/portfolio?as_of_date=2024-01-15
 ### Infrastructure
 | Component | Platform | Notes |
 |-----------|----------|-------|
-| Database | Supabase (PostgreSQL) | Managed, auto-backups |
-| Batch Jobs | Render Cron Jobs | Nightly 2 AM IST |
-| API | Render (Express) | Auto-scaling |
-| Frontend | Vercel (Next.js) | Edge deployment |
-| Scheduler | node-cron / Render Cron | Triggers Python batch |
+| Database | Railway PostgreSQL (Supabase optional) | Managed, scheduled backups |
+| Batch Jobs | Railway cron service | Nightly 02:00 UTC (07:30 IST) |
+| API | Railway (FastAPI + Dockerfile) | `railway.json` healthcheck `/health` |
+| Frontend | Railway (Next.js, Nixpacks) | `frontend/railway.json` |
+| Scheduler | Railway cron schedule | Triggers Python batch |
 
 ### Environment Variables
 ```bash

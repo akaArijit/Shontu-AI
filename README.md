@@ -108,11 +108,11 @@ python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
 
 See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for complete infrastructure setup:
 
-- **Database**: Supabase (PostgreSQL)
-- **Batch Jobs**: Render Cron Jobs (nightly 2 AM)
-- **API**: Render Web Service (Express)
-- **Frontend**: Vercel (Next.js)
-- **Monitoring**: Render dashboards + Supabase alerts
+- **Database**: Railway PostgreSQL (Supabase optional)
+- **Batch Jobs**: Railway cron service (nightly 2 AM UTC)
+- **API**: Railway service (Python FastAPI, Dockerfile)
+- **Frontend**: Railway service (Next.js)
+- **Monitoring**: Railway metrics/logs/alerts
 
 ## Roadmap
 
