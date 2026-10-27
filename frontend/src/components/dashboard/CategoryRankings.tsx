@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useState } from 'react';
 import { cn, formatPercent, formatNumber, formatRank, getScoreColor } from '@/lib/utils';
 import { CategoryRankingItem } from '@/types';

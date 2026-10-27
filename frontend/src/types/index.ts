@@ -112,6 +112,7 @@ export interface PipelineHealth {
   last_run_duration_seconds?: number;
   schemes_processed: number;
   alerts_generated: number;
+  started_at?: string;
 }
 
 export interface BenchmarkHistory {

@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+import React from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
 import { useAlerts, useAlertsSummary } from '@/hooks/useQueries';
@@ -7,10 +10,10 @@ import { Alert, AlertSummary } from '@/types';
 
 export default function AlertsPage() {
   const { data: alertsData, isLoading } = useAlerts({ unresolved_only: true });
-  const { data: summaries } = useAlertsSummary();
+  const { data: summariesData } = useAlertsSummary();
 
   const alerts = alertsData?.alerts || [];
-  const summaries = summaries || [];
+  const summaries = summariesData || [];
 
   if (isLoading) {
     return (

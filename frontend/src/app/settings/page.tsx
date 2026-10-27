@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+import React from 'react';
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -65,10 +68,20 @@ export default function SettingsPage() {
     { id: 'system', label: 'System', icon: Shield },
   ];
 
-  const handleWeightChange = (component: string, field: 'weight' | 'max_points', value: number) => {
-    const totalWeight = Object.keys(scoringConfig)
+  const COMPONENT_KEYS = [
+    'benchmark_outperformance',
+    'category_ranking',
+    'consistency_of_returns',
+    'drawdown_control',
+    'volatility_adjusted',
+  ] as const;
+
+  type ComponentKey = typeof COMPONENT_KEYS[number];
+
+  const handleWeightChange = (component: ComponentKey, field: 'weight' | 'max_points', value: number) => {
+    const totalWeight = COMPONENT_KEYS
       .filter(k => k !== component)
-      .reduce((sum, k) => sum + (scoringConfig[k as keyof typeof scoringConfig].weight || 0), 0);
+      .reduce((sum, k) => sum + (scoringConfig[k]?.weight || 0), 0);
     
     if (field === 'weight' && totalWeight + value > 1) {
       alert('Total weights cannot exceed 100%');
@@ -92,8 +105,8 @@ export default function SettingsPage() {
       if (value) overrides[category] = parseFloat(value);
       else delete overrides[category];
       return { ...r, overrides };
-    });
-  });
+    }));
+  };
 
   const addBenchmarkMapping = () => {
     if (!newBenchmarkMapping.scheme_code || !newBenchmarkMapping.benchmark) {
@@ -243,10 +256,10 @@ export default function SettingsPage() {
                     Save Scoring Config
                   </Button>
                 </div>
-              </Card>
-            )}
+              </CardContent>
+            </Card>
           </div>
-        )}
+            )}
 
         {/* Alert Rules Tab */}
         {activeTab === 'rules' && (

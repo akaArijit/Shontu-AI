@@ -1,16 +1,15 @@
 'use client';
 
+import React from 'react';
 import { useState } from 'react';
-import { cn, getSeverityColor, getSeverityIcon, getAlertTypeLabel, formatDate } from '@/lib/utils';
+import { cn, getSeverityColor, getAlertTypeLabel, formatDate } from '@/lib/utils';
 import { Alert, AlertSummary } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
-import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { MoreHorizontal, ChevronDown, ChevronUp, AlertTriangle, X, Check } from 'lucide-react';
-import { useBulkResolveAlerts, useBulkDismissAlerts, useResolveAlert, useDismissAlert, useAlertsSummary } from '@/hooks/useQueries';
 
 interface AlertsPanelProps {
   alerts: Alert[];
@@ -19,26 +18,21 @@ interface AlertsPanelProps {
   onDismiss?: (alertId: string, reason: string) => void;
 }
 
-export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsPanelProps) {
+export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsPanelProps): React.ReactElement {
   const [selectedAlerts, setSelectedAlerts] = useState<Set<string>>(new Set());
   const [showDismissModal, setShowDismissModal] = useState<string | null>(null);
   const [dismissReason, setDismissReason] = useState('');
 
-  const bulkResolve = useBulkResolveAlerts();
-  const bulkDismiss = useBulkDismissAlerts();
-  const resolveAlert = useResolveAlert();
-  const dismissAlert = useDismissAlert();
-
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedAlerts(new Set(alerts.map(a => a.alert_id)));
+      setSelectedAlerts(new Set(alerts.map((a) => a.alert_id)));
     } else {
       setSelectedAlerts(new Set());
     }
   };
 
   const handleSelectOne = (alertId: string, checked: boolean) => {
-    setSelectedAlerts(prev => {
+    setSelectedAlerts((prev) => {
       const next = new Set(prev);
       if (checked) next.add(alertId);
       else next.delete(alertId);
@@ -49,21 +43,25 @@ export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsP
   const handleBulkResolve = async () => {
     const ids = Array.from(selectedAlerts);
     if (ids.length === 0) return;
-    await bulkResolve.mutateAsync({ alertIds: ids, resolvedBy: 'MFD User' });
+    if (onResolve) {
+      ids.forEach((id) => onResolve(id));
+    }
     setSelectedAlerts(new Set());
   };
 
   const handleBulkDismiss = async () => {
     const ids = Array.from(selectedAlerts);
     if (ids.length === 0 || !dismissReason.trim()) return;
-    await bulkDismiss.mutateAsync({ alertIds: ids, dismissedBy: 'MFD User', reason: dismissReason });
+    if (onDismiss) {
+      ids.forEach((id) => onDismiss(id, dismissReason));
+    }
     setSelectedAlerts(new Set());
     setShowDismissModal(null);
     setDismissReason('');
   };
 
   const handleResolve = async (alertId: string) => {
-    await resolveAlert.mutateAsync({ alertId, resolvedBy: 'MFD User' });
+    if (onResolve) onResolve(alertId);
   };
 
   const handleDismiss = (alertId: string) => {
@@ -73,14 +71,14 @@ export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsP
 
   const handleConfirmDismiss = async (alertId: string) => {
     if (!dismissReason.trim()) return;
-    await dismissAlert.mutateAsync({ alertId, dismissedBy: 'MFD User', reason: dismissReason });
+    if (onDismiss) onDismiss(alertId, dismissReason);
     setShowDismissModal(null);
     setDismissReason('');
   };
 
-  const totalHigh = summaries.find(s => s.severity === 'high')?.count || 0;
-  const totalMedium = summaries.find(s => s.severity === 'medium')?.count || 0;
-  const totalLow = summaries.find(s => s.severity === 'low')?.count || 0;
+  const totalHigh = summaries.find((s) => s.severity === 'high')?.count || 0;
+  const totalMedium = summaries.find((s) => s.severity === 'medium')?.count || 0;
+  const totalLow = summaries.find((s) => s.severity === 'low')?.count || 0;
 
   return (
     <div className="space-y-4">
@@ -103,16 +101,16 @@ export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsP
         <div className="flex items-center gap-2">
           {selectedAlerts.size > 0 && (
             <>
-              <Button variant="primary" size="sm" onClick={handleBulkResolve} disabled={bulkResolve.isPending}>
+              <Button variant="primary" size="sm" onClick={handleBulkResolve}>
                 <Check className="w-4 h-4 mr-1" />
                 Resolve ({selectedAlerts.size})
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowDismissModal('bulk')} disabled={bulkDismiss.isPending}>
+              <Button variant="outline" size="sm" onClick={() => setShowDismissModal('bulk')}>
                 <X className="w-4 h-4 mr-1" />
                 Dismiss ({selectedAlerts.size})
               </Button>
             </>
-          }
+          )}
         </div>
       </div>
 
@@ -124,27 +122,30 @@ export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsP
               {showDismissModal === 'bulk' ? `Dismiss ${selectedAlerts.size} alerts` : 'Dismiss alert'}
             </h3>
             <p className="text-neutral-600 mb-4">
-              {showDismissModal === 'bulk' 
+              {showDismissModal === 'bulk'
                 ? 'This will dismiss all selected alerts. Please provide a reason.'
                 : 'This will dismiss the selected alert. Please provide a reason.'}
             </p>
             <textarea
               value={dismissReason}
-              onChange={e => setDismissReason(e.target.value)}
+              onChange={(e) => setDismissReason(e.target.value)}
               placeholder="Reason for dismissal (e.g., 'False positive', 'Client informed', 'Data error')"
               className="w-full px-3 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[80px] resize-y mb-4"
               rows={3}
             />
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { setShowDismissModal(null); setDismissReason(''); }}
+                onClick={() => {
+                  setShowDismissModal(null);
+                  setDismissReason('');
+                }}
                 className="px-4 py-2 text-neutral-600 hover:text-neutral-900"
               >
                 Cancel
               </button>
-              <Button 
-                onClick={() => showDismissModal === 'bulk' ? handleBulkDismiss() : handleConfirmDismiss(showDismissModal)}
-                disabled={!dismissReason.trim() || bulkDismiss.isPending}
+              <Button
+                onClick={() => (showDismissModal === 'bulk' ? handleBulkDismiss() : handleConfirmDismiss(showDismissModal))}
+                disabled={!dismissReason.trim()}
               >
                 Dismiss
               </Button>
@@ -152,7 +153,7 @@ export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsP
           </div>
         </div>
       )}
-      
+
       {/* Alerts Table */}
       <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -179,63 +180,63 @@ export function AlertsPanel({ alerts, summaries, onResolve, onDismiss }: AlertsP
                   </td>
                 </tr>
               ) : (
-                alerts.map(alert => (
-                  <tr key={alert.alert_id} className="hover:bg-neutral-50">
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedAlerts.has(alert.alert_id)}
-                        onChange={e => handleSelectOne(alert.alert_id, e.target.checked)}
-                        className="w-4 h-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge 
-                        variant={alert.severity === 'high' ? 'danger' : alert.severity === 'medium' ? 'warning' : 'info'}
-                        size="sm"
-                        dot
-                      >
-                        {alert.severity.toUpperCase()}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="neutral" size="sm">
-                        {getAlertTypeLabel(alert.alert_type)}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-neutral-900">{alert.scheme_name}</div>
-                      <div className="text-xs text-neutral-500">{alert.scheme_code}</div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-neutral-600">{alert.category}</td>
-                    <td className="px-4 py-3 text-sm text-neutral-600">{formatDate(alert.triggered_on)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button
-                          onClick={() => handleResolve(alert.alert_id)}
-                          disabled={resolveAlert.isPending}
-                          className="p-1.5 rounded hover:bg-success-50 text-success-600"
-                          title="Resolve"
+                alerts.map((alert) => {
+                  return (
+                    <tr key={alert.alert_id} className="hover:bg-neutral-50">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedAlerts.has(alert.alert_id)}
+                          onChange={(e) => handleSelectOne(alert.alert_id, e.target.checked)}
+                          className="w-4 h-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          variant={alert.severity === 'high' ? 'danger' : alert.severity === 'medium' ? 'warning' : 'info'}
+                          size="sm"
+                          dot
                         >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDismiss(alert.alert_id)}
-                          disabled={dismissAlert.isPending}
-                          className="p-1.5 rounded hover:bg-neutral-100 text-neutral-600"
-                          title="Dismiss"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {alert.severity.toUpperCase()}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant="neutral" size="sm">
+                          {getAlertTypeLabel(alert.alert_type)}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-neutral-900">{alert.scheme_name}</div>
+                        <div className="text-xs text-neutral-500">{alert.scheme_code}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-neutral-600">{alert.category}</td>
+                      <td className="px-4 py-3 text-sm text-neutral-600">{formatDate(alert.triggered_on)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button
+                            onClick={() => handleResolve(alert.alert_id)}
+                            className="p-1.5 rounded hover:bg-success-50 text-success-600"
+                            title="Resolve"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDismiss(alert.alert_id)}
+                            className="p-1.5 rounded hover:bg-neutral-100 text-neutral-600"
+                            title="Dismiss"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }

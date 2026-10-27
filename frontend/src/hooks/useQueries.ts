@@ -78,7 +78,10 @@ export function useAlerts(params: Record<string, unknown> = {}) {
   const { data: asOfDate } = useAsOfDate();
   return useQuery<AlertsResponse>({
     queryKey: ['alerts', params, asOfDate],
-    queryFn: () => api.getAlerts({ ...params, as_of_date: asOfDate }),
+    queryFn: async (): Promise<AlertsResponse> => {
+      const response = await api.getAlerts({ ...params, as_of_date: asOfDate });
+      return response;
+    },
     enabled: !!asOfDate,
     refetchInterval: 5 * 60 * 1000, // 5 minutes
   });

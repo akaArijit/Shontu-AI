@@ -1,11 +1,14 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+import React from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { usePipelineHealth } from '@/hooks/useQueries';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { formatDateTime, getSeverityColor, getStatusColor, getStatusDot } from '@/lib/utils';
+import { cn, formatDateTime, getSeverityColor, getStatusColor, getStatusDot } from '@/lib/utils';
 import { 
   Database, 
   RefreshCw, 
@@ -75,10 +78,10 @@ export default function PipelinePage() {
                 <div>
                   <p className="text-sm font-medium text-neutral-500">Pipeline Status</p>
                   <p className="text-2xl font-bold text-neutral-900 mt-1">
-                    {health ? statusLabels[health.status as keyof typeof statusLabels] : 'Loading...'}
+                    {health ? statusLabels[health.last_run_status as keyof typeof statusLabels] : 'Loading...'}
                   </p>
                 </div>
-                <div className={cn('w-12 h-12 rounded-full flex items-center justify-center', getSeverityColor(health?.status || 'healthy'))}>
+                <div className={cn('w-12 h-12 rounded-full flex items-center justify-center', getSeverityColor(health?.last_run_status || 'healthy'))}>
                   <Activity className="w-6 h-6 text-white" />
                 </div>
               </div>
@@ -91,7 +94,7 @@ export default function PipelinePage() {
                 <div>
                   <p className="text-sm font-medium text-neutral-500">Last Run</p>
                   <p className="text-2xl font-bold text-neutral-900 mt-1">
-                    {health ? formatDateTime(health.started_at) : '—'}
+                    {health ? formatDateTime(health.started_at || health.as_of_date) : '—'}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
@@ -107,7 +110,7 @@ export default function PipelinePage() {
                 <div>
                   <p className="text-sm font-medium text-neutral-500">Duration</p>
                   <p className="text-2xl font-bold text-neutral-900 mt-1">
-                    {health?.duration_seconds ? `${(health.duration_seconds / 60).toFixed(1)} min` : '—'}
+                    {health?.last_run_duration_seconds ? `${(health.last_run_duration_seconds / 60).toFixed(1)} min` : '—'}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-warning-100 flex items-center justify-center">
@@ -278,7 +281,7 @@ export default function PipelinePage() {
                   <span className="text-sm font-medium text-neutral-600">Avg Pipeline Duration</span>
                 </div>
                 <p className="text-2xl font-bold text-neutral-900">18.5 min</p>
-                <p className="text-sm text-neutral-500">Target: < 20 min</p>
+                <p className="text-sm text-neutral-500">Target: {'<'} 20 min</p>
               </div>
               <div className="p-4 rounded-lg bg-neutral-50">
                 <div className="flex items-center gap-2 mb-2">

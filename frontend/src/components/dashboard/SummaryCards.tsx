@@ -90,7 +90,7 @@ export function DashboardSummary({
       />
       <SummaryCard
         title="Total AUM"
-        value={formatNumber(totalAUM / 1e7)} + " Cr"
+        value={`${formatNumber(totalAUM / 1e7)} Cr`}
         change={5.4}
         changeLabel="vs last year"
         icon={<Users className="w-6 h-6" />}
@@ -146,8 +146,4 @@ export function DashboardSummary({
       </div>
     </div>
   );
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString('en-IN');
 }

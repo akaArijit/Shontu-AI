@@ -10,6 +10,7 @@ import {
   Activity, 
   Settings, 
   Database,
+  Upload,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Alerts', href: '/alerts', icon: AlertTriangle },
   { name: 'Rankings', href: '/rankings', icon: BarChart2 },
+  { name: 'CSV Upload', href: '/csv-upload', icon: Upload },
   { name: 'Pipeline', href: '/pipeline', icon: Activity },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

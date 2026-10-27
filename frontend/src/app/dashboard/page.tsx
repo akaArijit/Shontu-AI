@@ -1,12 +1,15 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+import React from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DashboardSummary } from '@/components/dashboard/SummaryCards';
 import { SchemeTable } from '@/components/dashboard/SchemeTable';
 import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
 import { CategoryRankings } from '@/components/dashboard/CategoryRankings';
 import { useSchemes, useScores, useAlerts, useAlertsSummary, useAllCategoryRankings, usePipelineHealth } from '@/hooks/useQueries';
-import { MFDSchemeSummary, Alert, AlertSummary } from '@/types';
+import { MFDSchemeSummary, Alert, AlertSummary, CategoryRankingResponse } from '@/types';
 
 export default function DashboardPage() {
   const { data: schemesData, isLoading: schemesLoading } = useSchemes({});
@@ -28,13 +31,13 @@ export default function DashboardPage() {
     const score = scoreMap.get(scheme.scheme_code);
     return {
       ...scheme,
-      fund_health_score: score?.fund_health_score,
-      category_rank: score?.category_rank,
-      category_percentile: score?.category_percentile,
-      alpha_1y: score?.breakdown?.find(b => b.component === 'benchmark_outperformance')?.raw_value,
-      return_1y: score?.rolling_returns?.return_1y,
-      max_drawdown_1y: score?.breakdown?.find(b => b.component === 'drawdown_control')?.raw_value,
-      volatility_1y: score?.breakdown?.find(b => b.component === 'volatility_adjusted')?.raw_value,
+      fund_health_score: score?.fund_health_score ?? scheme.fund_health_score,
+      category_rank: score?.category_rank ?? scheme.category_rank,
+      category_percentile: score?.category_percentile ?? scheme.category_percentile,
+      alpha_1y: score?.breakdown?.find(b => b.component === 'benchmark_outperformance')?.raw_value ?? scheme.alpha_1y,
+      return_1y: scheme.return_1y,
+      max_drawdown_1y: score?.breakdown?.find(b => b.component === 'drawdown_control')?.raw_value ?? scheme.max_drawdown_1y,
+      volatility_1y: score?.breakdown?.find(b => b.component === 'volatility_adjusted')?.raw_value ?? scheme.volatility_1y,
     };
   });
 
@@ -117,7 +120,7 @@ export default function DashboardPage() {
 
         {/* Category Rankings */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          {categoryRankings.map((catRanking: any) => (
+          {rankings.map((catRanking) => (
             <CategoryRankings
               key={catRanking.category}
               rankings={catRanking.rankings}
