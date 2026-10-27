@@ -44,12 +44,13 @@ Thumbs.db
 logs/
 
 # Data files (generated)
-*.json
-!config/*.json
+data/*.json
+exports/*.json
 data/
 exports/
 *.parquet
 *.csv
+*.tsbuildinfo
 
 # Model artifacts
 models/
