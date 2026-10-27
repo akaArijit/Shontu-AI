@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
 
-from api.routes import mfd_scores
+from api.routes import mfd_scores, csv_upload
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +50,7 @@ app.add_middleware(
 
 # Include MFD routes
 app.include_router(mfd_scores.router)
+app.include_router(csv_upload.router)
 
 
 @app.get("/")

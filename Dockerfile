@@ -14,9 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies (pipeline + API)
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+COPY api/requirements.txt ./api-requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt -r api-requirements.txt
 
 # ============================================================
 # PRODUCTION STAGE
