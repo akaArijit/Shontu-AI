@@ -3,10 +3,11 @@ MFD Fund Monitoring API - FastAPI Application
 Internal use only - Mutual Fund Distributors
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 from pathlib import Path
 
 from api.routes import mfd_scores, csv_upload
@@ -40,17 +41,28 @@ app = FastAPI(
 )
 
 # CORS configuration for internal MFD dashboard
+# Comma-separated list, e.g. "https://web.up.railway.app,http://localhost:3000"
+_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include MFD routes
-app.include_router(mfd_scores.router)
-app.include_router(csv_upload.router)
+# Public API is versioned under /api/v1 (matches the frontend client baseURL)
+api_v1 = APIRouter(prefix="/api/v1")
+api_v1.include_router(mfd_scores.router)
+api_v1.include_router(csv_upload.router)
+app.include_router(api_v1)
 
 
 @app.get("/")

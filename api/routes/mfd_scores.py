@@ -8,6 +8,11 @@ from typing import Optional, List
 from datetime import date, timedelta
 from pydantic import BaseModel
 from enum import Enum
+import logging
+
+from api.db import get_cursor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mfd", tags=["MFD Fund Monitoring"])
 
@@ -154,7 +159,7 @@ async def get_fund_scores(
     # Implementation: Query fund_scores table with filters
     # Join scheme_master for scheme_name, category, amc, benchmark_name
     # Return paginated results
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/scores/{scheme_code}", response_model=FundScoreResponse)
@@ -163,7 +168,7 @@ async def get_fund_score_detail(
     as_of_date: date = Query(..., description="Score date (YYYY-MM-DD)")
 ):
     """Get detailed score breakdown for a single scheme."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/scores/latest", response_model=FundScoreListResponse)
@@ -174,7 +179,7 @@ async def get_latest_scores(
     offset: int = Query(0, ge=0)
 ):
     """Get latest available scores (auto-detects latest as_of_date)."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 # ============================================================
@@ -192,7 +197,7 @@ async def get_alerts(
     offset: int = Query(0, ge=0)
 ):
     """Get triggered alerts for MFD action."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/alerts/summary", response_model=List[AlertSummaryResponse])
@@ -201,7 +206,7 @@ async def get_alerts_summary(
     unresolved_only: bool = Query(True)
 ):
     """Get alert counts by type and severity for dashboard badges."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.post("/alerts/{alert_id}/resolve")
@@ -210,7 +215,7 @@ async def resolve_alert(
     resolved_by: str = Query(..., description="MFD user ID")
 ):
     """Mark alert as resolved by MFD."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.post("/alerts/{alert_id}/dismiss")
@@ -220,7 +225,7 @@ async def dismiss_alert(
     reason: str = Query(...)
 ):
     """Dismiss alert with reason (e.g., 'false positive', 'client informed')."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 # ============================================================
@@ -244,7 +249,7 @@ async def get_schemes_monitoring(
     Primary MFD monitoring view: All schemes with scores, key metrics, and alert counts.
     Optimized for MFD dashboard - single query with all needed data.
     """
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/schemes/{scheme_code}", response_model=MFDSchemeSummary)
@@ -253,7 +258,7 @@ async def get_scheme_monitoring_detail(
     as_of_date: date = Query(...)
 ):
     """Detailed view for single scheme with full metrics and alert history."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 # ============================================================
@@ -268,7 +273,7 @@ async def get_category_rankings(
     limit: int = Query(50, ge=1, le=200)
 ):
     """Category-wise rankings for MFD peer comparison."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/rankings/all", response_model=List[CategoryRankingListResponse])
@@ -277,7 +282,7 @@ async def get_all_category_rankings(
     limit_per_category: int = Query(20, ge=1, le=100)
 ):
     """All category rankings in one call for overview dashboard."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 # ============================================================
@@ -291,7 +296,7 @@ async def get_benchmark_history(
     to_date: Optional[date] = Query(None)
 ):
     """Benchmark index history for context panels."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/macro")
@@ -301,7 +306,7 @@ async def get_macro_context(
     to_date: Optional[date] = Query(None)
 ):
     """Macro indicators for MFD context panel (not used in scoring)."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 # ============================================================
@@ -310,8 +315,76 @@ async def get_macro_context(
 
 @router.get("/health", response_model=PipelineHealthResponse)
 async def get_pipeline_health():
-    """Check pipeline health and data freshness for MFD operations."""
-    pass
+    """Pipeline freshness for MFD operations.
+
+    Never fails: if the database is unreachable or no pipeline has run yet,
+    returns a `degraded` snapshot with zero counters so the dashboard can
+    render "no data yet" instead of erroring.
+    """
+    today = date.today()
+    payload = {
+        "as_of_date": today,
+        "latest_nav_date": None,
+        "latest_score_date": None,
+        "latest_alert_date": None,
+        "last_run_status": "degraded",
+        "last_run_duration_seconds": None,
+        "schemes_processed": 0,
+        "alerts_generated": 0,
+    }
+
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    (SELECT MAX(nav_date) FROM nav_history)      AS latest_nav_date,
+                    (SELECT MAX(as_of_date) FROM fund_scores)    AS latest_score_date,
+                    (SELECT MAX(triggered_on) FROM fund_alerts)  AS latest_alert_date
+                """
+            )
+            freshness = cur.fetchone() or {}
+
+            cur.execute(
+                """
+                SELECT status,
+                       as_of_date,
+                       schemes_processed,
+                       alerts_generated,
+                       EXTRACT(EPOCH FROM (completed_at - started_at)) AS duration_seconds
+                FROM pipeline_run_log
+                ORDER BY started_at DESC
+                LIMIT 1
+                """
+            )
+            run = cur.fetchone()
+
+            if freshness:
+                payload.update(
+                    {
+                        "latest_nav_date": freshness.get("latest_nav_date"),
+                        "latest_score_date": freshness.get("latest_score_date"),
+                        "latest_alert_date": freshness.get("latest_alert_date"),
+                    }
+                )
+
+            if run:
+                duration = run.get("duration_seconds")
+                payload.update(
+                    {
+                        "as_of_date": run.get("as_of_date") or today,
+                        "last_run_status": run.get("status") or "degraded",
+                        "last_run_duration_seconds": (
+                            float(duration) if duration is not None else None
+                        ),
+                        "schemes_processed": run.get("schemes_processed") or 0,
+                        "alerts_generated": run.get("alerts_generated") or 0,
+                    }
+                )
+    except Exception as exc:  # noqa: BLE001 - health must never 500
+        logger.warning("Pipeline health falling back to degraded: %s", exc)
+
+    return PipelineHealthResponse(**payload)
 
 
 @router.get("/meta/scoring-config")
@@ -319,13 +392,13 @@ async def get_scoring_config(
     version: Optional[str] = Query(None)
 ):
     """Current scoring configuration for audit/training."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.get("/meta/rules-config")
 async def get_rules_config():
     """Current alert rules configuration for MFD reference."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 # ============================================================
@@ -346,10 +419,10 @@ class BulkDismissRequest(BaseModel):
 @router.post("/alerts/bulk-resolve")
 async def bulk_resolve_alerts(request: BulkResolveRequest):
     """Resolve multiple alerts at once."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")
 
 
 @router.post("/alerts/bulk-dismiss")
 async def bulk_dismiss_alerts(request: BulkDismissRequest):
     """Dismiss multiple alerts with same reason."""
-    pass
+    raise HTTPException(status_code=503, detail="Endpoint not yet wired to the database")

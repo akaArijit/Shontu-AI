@@ -21,8 +21,14 @@ export function useAsOfDate() {
   return useQuery({
     queryKey: ['latestAsOfDate'],
     queryFn: async () => {
-      const res = await api.getLatestScores({ limit: 1 });
-      return res.as_of_date;
+      try {
+        const res = await api.getLatestScores({ limit: 1 });
+        return res.as_of_date;
+      } catch {
+        // No scores yet (fresh deployment) - fall back to today so the
+        // dashboard renders empty states instead of loading forever.
+        return new Date().toISOString().split('T')[0];
+      }
     },
     staleTime: 1000 * 60 * 60, // 1 hour
   });

@@ -320,3 +320,27 @@ Railway bills by usage (vCPU-minutes, GB-minutes, egress) plus plan fee; Postgre
 | **Total** | **~$13–27** |
 
 Verify current pricing at https://railway.app/pricing. Supabase remains an option if you prefer a managed DB with PITR — point `DATABASE_URL` at it and skip the Postgres plugin.
+
+---
+
+## 15. Current implementation status (read before go-live)
+
+Deployment plumbing is complete; some application layers are still placeholders:
+
+| Layer | Status |
+|-------|--------|
+| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 128 tests passing |
+| CSV upload/validation (`/mfd/csv/*`) | ✅ Working (in-memory validation) |
+| `/health`, `/` | ✅ Working |
+| `/api/v1/mfd/health` | ✅ Queries `pipeline_run_log`; returns `degraded` when DB is empty/unreachable |
+| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | ⚠️ Contract only — return `503 Endpoint not yet wired to the database` |
+| `scripts/run_nightly.py` persistence step | ⚠️ Placeholder — logs "Persisted all results" without writing rows |
+| Frontend | ✅ Builds and runs; shows empty/error states when the API has no data |
+
+To reach a usable production dashboard you still need to implement:
+
+1. **Persistence** in `scripts/run_nightly.py::_run_persistence` (upsert `scheme_master`, `nav_history`, `fund_scores`, `fund_alerts`, `pipeline_run_log`).
+2. **Query layer** for the 503 endpoints in `api/routes/mfd_scores.py` using `api/db.py:get_cursor()`.
+
+Until then, set `NEXT_PUBLIC_USE_MOCK_API=true` on the frontend service to demo the UI with generated data.
+
