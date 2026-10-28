@@ -6,6 +6,7 @@ import asyncio
 import io
 from contextlib import contextmanager
 
+import pytest
 from fastapi import UploadFile
 
 from api.routes import csv_upload
@@ -228,3 +229,45 @@ def test_benchmark_history_upload_dry_run(monkeypatch):
     assert response["valid_rows"] == 3
     assert response["persisted_rows"] == 0
     assert response["success"] is True
+
+
+def test_scheme_upload_accepts_excel_bom_and_uppercase_extension(monkeypatch):
+    def _explode(*args, **kwargs):
+        raise AssertionError("dry run must not open a connection")
+
+    monkeypatch.setattr(csv_upload, "get_cursor", _explode)
+
+    response = asyncio.run(
+        csv_upload.upload_scheme_master_csv(
+            _upload("\ufeff" + SCHEME_CSV, "SCHEMES.CSV"), dry_run=True, overwrite=False
+        )
+    )
+
+    assert response.valid_rows == 2
+    assert response.invalid_rows == 0
+
+
+def test_benchmark_history_accepts_excel_bom(monkeypatch):
+    monkeypatch.setattr(csv_upload, "get_cursor", lambda *a, **k: None)
+
+    response = asyncio.run(
+        csv_upload.upload_benchmark_history_csv(
+            _upload("\ufeff" + BENCHMARK_HISTORY_CSV, "history.CSV"), dry_run=True
+        )
+    )
+
+    assert response["valid_rows"] == 3
+    assert response["success"] is True
+
+
+def test_non_csv_upload_is_rejected():
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            csv_upload.upload_benchmark_history_csv(
+                _upload("a,b\n1,2", "history.txt"), dry_run=True
+            )
+        )
+
+    assert exc_info.value.status_code == 400

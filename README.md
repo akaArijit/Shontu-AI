@@ -97,11 +97,11 @@ fund-engine/
 | Features | 38 | ✅ |
 | Rules | 15 | ✅ |
 | Scoring | 17 | ✅ |
-| API | 26 | ✅ |
+| API | 29 | ✅ |
 | Database persistence | 8 | ✅ |
 | Pipeline & scripts | 12 | ✅ |
 | End-to-end | 1 | ✅ |
-| **Total** | **184** | ✅ |
+| **Total** | **187** | ✅ |
 
 ```bash
 # Run all tests

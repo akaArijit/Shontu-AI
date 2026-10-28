@@ -33,6 +33,22 @@ def _persist(callback):
         raise HTTPException(status_code=503, detail="Database unavailable") from exc
 
 
+def _ensure_csv(file: UploadFile) -> None:
+    """Reject non-CSV uploads (case-insensitive) before reading the body."""
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+
+def _decode_csv(content: bytes) -> str:
+    """Decode an uploaded CSV, stripping the BOM that Excel exports include."""
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail="Unable to decode CSV. Ensure UTF-8 encoding."
+        ) from exc
+
+
 def _parse_history_date(raw: str) -> date:
     """Accept ISO and common Indian date formats used in NSE exports."""
     text = (raw or "").strip()
@@ -200,19 +216,11 @@ async def upload_scheme_master_csv(
 
     Returns validation results and preview of parsed data.
     """
-    if not file.filename.endswith(".csv"):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     content = await file.read()
-    try:
-        content_str = content.decode("utf-8")
-    except UnicodeDecodeError:
-        try:
-            content_str = content.decode("utf-8-sig")  # Handle BOM
-        except UnicodeDecodeError:
-            raise HTTPException(
-                status_code=400, detail="Unable to decode CSV. Ensure UTF-8 encoding."
-            )
+    content_str = _decode_csv(content)
 
     # Parse CSV
     reader = csv.DictReader(io.StringIO(content_str))
@@ -396,11 +404,11 @@ async def upload_benchmark_mappings_csv(
     Upload explicit benchmark mappings CSV.
     Expected columns: scheme_code, benchmark_code
     """
-    if not file.filename.endswith(".csv"):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     content = await file.read()
-    content_str = content.decode("utf-8")
+    content_str = _decode_csv(content)
 
     reader = csv.DictReader(io.StringIO(content_str))
     rows = list(reader)
@@ -492,11 +500,11 @@ async def upload_benchmark_history_csv(
     Useful when NSE's site is unreachable or for non-NSE benchmarks
     (CRISIL, S&P 500). Existing points are overwritten.
     """
-    if not file.filename.endswith(".csv"):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     content = await file.read()
-    content_str = content.decode("utf-8")
+    content_str = _decode_csv(content)
 
     reader = csv.DictReader(io.StringIO(content_str))
     rows = list(reader)

@@ -138,6 +138,12 @@ Then generate a domain, and finally set the API's `ALLOWED_ORIGINS` to that exac
 > Pointing the batch service at `railway.batch.json` keeps it from inheriting the
 > API's `/health` check and `ON_FAILURE` restart policy.
 
+**Sizing:** the pipeline loads all active schemes' 6-year NAV/benchmark history
+into memory. Budget ~1 GB for a few hundred schemes; if the service hits its
+memory limit, raise the batch service memory or shorten the lookback
+(`DEFAULT_LOOKBACK_DAYS` in `db/queries.py` and the benchmark window in
+`scripts/run_nightly.py`). Keep at least 6 years for 5-year metrics.
+
 Variables: same as the API. No batch-specific variables are required.
 
 Keep **Restart policy = Never** and enable **Cron Schedule**; otherwise Railway restarts the container after each successful run. Logs land in the service's **Deployments → Logs**, and nightly files in `logs/`.
@@ -173,7 +179,7 @@ Copy `.env.example` for the full list. Never commit real secrets.
 
 `.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
 
-1. **test** — `pytest` (184 tests) + e2e pipeline
+1. **test** — `pytest` (187 tests) + e2e pipeline
 2. **docker-build** — builds the image, pushes to GHCR
 3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
 4. **deploy-*** — optional Railway CLI deploys
@@ -325,7 +331,7 @@ Deployment plumbing and the data layer are complete:
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 184 tests passing |
+| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 187 tests passing |
 | Benchmark TRI ingestion (`NseIndicesFetcher`) | ✅ Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `scripts/seed_benchmarks.py` backfill |
 | CSV upload/validation/persistence (`/mfd/csv/*`) | ✅ Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
 | Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | ✅ Columns `benchmark_code,index_date,index_value`; overwrites existing points |
