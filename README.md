@@ -46,8 +46,8 @@ fund-engine/
 │   │   ├── scoring/             # 0-100 scoring engine
 │   │   ├── scripts/             # run_nightly, seed_benchmarks, apply_migrations
 │   │   ├── Dockerfile           # Railway API + batch image
-│   │   ├── railway.json         # Railway API config
-│   │   ├── railway.batch.json   # Railway cron config
+│   │   ├── railway.json         # legacy Railway CaC (optional)
+│   │   ├── railway.batch.json   # legacy Railway cron CaC (optional)
 │   │   └── requirements.txt
 │   └── web/                     # Next.js 14 dashboard (Vercel)
 │       ├── src/app/             # Dashboard, Alerts, Rankings, CSV, Pipeline, Settings
@@ -137,11 +137,14 @@ python -m pytest resolution ingestion features rules scoring db api scripts test
 | Component | Platform | Root directory | Config |
 |-----------|----------|----------------|--------|
 | Dashboard | Vercel | `apps/web` | `apps/web/next.config.js`, env in Vercel |
-| API | Railway (Dockerfile) | `apps/api` | `apps/api/railway.json` |
-| Batch / cron | Railway (Dockerfile) | `apps/api` | `apps/api/railway.batch.json`, `0 2 * * *` UTC |
+| API | Railway (Dockerfile) | `apps/api` | Dockerfile auto-detected; legacy `railway.json` |
+| Batch / cron | Railway (Dockerfile) | `apps/api` | Dockerfile auto-detected; cron `0 2 * * *` UTC |
 | Database | Railway PostgreSQL | — | plugin `DATABASE_URL` |
 
-Both platforms auto-deploy on push to `master`. See
+Both platforms auto-deploy on push to `master`. Railway deprecated
+Config-as-Code in 2026 — new services are configured in the dashboard (root
+directory, start command, healthcheck, cron), and the `railway*.json` files in
+`apps/api` are kept only for legacy services. See
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the full runbook: project setup,
 migrations, seeding, environment variables, CORS for Vercel previews,
 monitoring, backups, rollback, and troubleshooting.

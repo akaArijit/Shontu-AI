@@ -362,8 +362,8 @@ GET /api/v1/clients/{client_id}/portfolio?as_of_date=2024-01-15
 | Component | Platform | Notes |
 |-----------|----------|-------|
 | Database | Railway PostgreSQL (Supabase optional) | Managed, scheduled backups |
-| API | Railway (FastAPI + Dockerfile) | `apps/api/railway.json`, healthcheck `/health` |
-| Batch Jobs | Railway cron service | `apps/api/railway.batch.json`, nightly 02:00 UTC (07:30 IST) |
+| API | Railway (FastAPI + Dockerfile) | Root `apps/api`, healthcheck `/health` (legacy `railway.json`) |
+| Batch Jobs | Railway cron service | Root `apps/api`, cron 02:00 UTC (07:30 IST) (legacy `railway.batch.json`) |
 | Frontend | Vercel (Next.js) | Root directory `apps/web` |
 | Scheduler | Railway cron schedule | Triggers the Python batch |
 

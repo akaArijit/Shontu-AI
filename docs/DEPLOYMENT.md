@@ -5,16 +5,22 @@ The production topology is split by workload:
 | Component | Platform | Root directory | Config |
 |-----------|----------|----------------|--------|
 | Dashboard (Next.js 14) | **Vercel** | `apps/web` | `apps/web/next.config.js`, Vercel env vars |
-| API (FastAPI) | **Railway** (Dockerfile) | `apps/api` | `apps/api/railway.json` |
-| Nightly batch (cron) | **Railway** (Dockerfile) | `apps/api` | `apps/api/railway.batch.json` |
+| API (FastAPI) | **Railway** (Dockerfile) | `apps/api` | Dockerfile auto-detected; legacy `apps/api/railway.json` |
+| Nightly batch (cron) | **Railway** (Dockerfile) | `apps/api` | Dockerfile auto-detected; legacy `apps/api/railway.batch.json` |
 | PostgreSQL 15 | **Railway** plugin | — | plugin `DATABASE_URL` |
 
-Config files already in the repo:
+> **Railway deprecated Config-as-Code in 2026.** New services no longer read
+> `railway.json` / `railway.toml`, and legacy files stop being read on
+> **2026-12-01**. The files under `apps/api` are kept only for services that
+> already used them. For a new project, configure the services in the Railway
+> dashboard using the tables below — Railway auto-detects `apps/api/Dockerfile`
+> from the service root, so no config file is required.
 
-- `apps/api/railway.json` — Dockerfile build, `/health` healthcheck, restart policy, 1 replica
-- `apps/api/railway.batch.json` — no healthcheck, restart `NEVER` (cron services must exit)
+Files that matter:
+
 - `apps/api/Dockerfile` — installs pipeline + API deps, runs as non-root `appuser`, binds `$PORT`
 - `apps/web/next.config.js` — security headers, `poweredByHeader: false`
+- `apps/api/railway.json` / `railway.batch.json` — **legacy** CaC only (not read by new services)
 
 Both platforms deploy automatically from GitHub on push to `master`. CI
 (`.github/workflows/ci-cd.yml`) runs tests, a production web build, a Docker
@@ -95,10 +101,12 @@ secret `DATABASE_URL` is set (use the Postgres **public** URL with SSL).
 |---------|-------|
 | Source | `akaArijit/Shontu-AI` / `master` |
 | Root directory | `apps/api` |
-| Builder | Dockerfile (auto-detected from `apps/api/railway.json`) |
-| Config-as-code | `/railway.json` (default) |
+| Builder | Dockerfile (auto-detected; no config file needed) |
+| Config-as-code | leave blank for new services (legacy: `/apps/api/railway.json`) |
 | Healthcheck path | `/health` |
+| Restart policy | On failure |
 | Start command | `sh -c 'uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2'` |
+| Watch paths | `/apps/api/**` (optional; avoids redeploys on dashboard-only changes) |
 
 Variables:
 
@@ -132,16 +140,18 @@ Railway only promotes a deploy once `/health` returns 200.
 | Setting | Value |
 |---------|-------|
 | Root directory | `apps/api` |
-| Config-as-code file | `/railway.batch.json` (Settings → Config-as-code) |
-| Builder | Dockerfile |
-| Start command | `python scripts/run_nightly.py` (from `railway.batch.json`) |
+| Config-as-code file | leave blank for new services (legacy: `/apps/api/railway.batch.json`) |
+| Builder | Dockerfile (auto-detected) |
+| Start command | `python scripts/run_nightly.py` |
 | Cron schedule | `0 2 * * *` (02:00 UTC = 07:30 IST) |
 | Restart policy | **Never** |
 | Healthcheck | none |
+| Watch paths | `/apps/api/**` (optional) |
 
-> Pointing the batch service at `railway.batch.json` prevents it from
-> inheriting the API's `/health` check and `ON_FAILURE` restart policy. Without
-> `NEVER`, Railway restarts the container after every successful cron run.
+> The batch service must not inherit the API's `/health` check or `ON_FAILURE`
+> restart policy. Set **Restart policy = Never** and **Cron schedule =
+> `0 2 * * *`** in the service settings (Settings → Deploy). Without `NEVER`,
+> Railway restarts the container after every successful cron run.
 
 Variables: same as the API (`DATABASE_URL` + optional config paths). No
 batch-specific variables are required.
@@ -366,8 +376,8 @@ object storage. Vercel has no persistent state — the dashboard is stateless.
 | Postgres | 100 GB | storage > 80% → upgrade plan |
 | Dashboard | Vercel edge CDN | serverless functions scale automatically |
 
-`railway.json` pins `numReplicas: 1` to keep DB load predictable; raise it in
-the Railway dashboard when needed. Multiple API replicas are safe (stateless).
+Set replicas to `1` in the Railway dashboard (Settings → Deploy) to keep DB load
+predictable; raise it when needed. Multiple API replicas are safe (stateless).
 
 ---
 
