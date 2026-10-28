@@ -109,7 +109,7 @@ Open http://localhost:3000. Set `NEXT_PUBLIC_USE_MOCK_API=true` (or
 ```bash
 npm run dev            # dashboard dev server
 npm run build          # production dashboard build
-npm run test:api       # full pytest suite (194 tests)
+npm run test:api       # full pytest suite (206 tests)
 npm run migrate        # apply pending SQL migrations
 npm run pipeline       # one nightly pipeline run (needs DATABASE_URL)
 npm run seed:benchmarks
@@ -129,11 +129,12 @@ python -m pytest -q
 | Features | 38 |
 | Rules | 15 |
 | Scoring | 17 |
-| API | 32 |
+| API | 38 |
+| Core settings & paths | 6 |
 | Database persistence | 8 |
 | Pipeline & scripts | 16 |
 | End-to-end | 1 |
-| **Total** | **194** |
+| **Total** | **206** |
 
 ## Deployment
 

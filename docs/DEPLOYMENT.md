@@ -279,7 +279,7 @@ Templates: [`apps/api/.env.example`](../apps/api/.env.example) and
 `.github/workflows/ci-cd.yml` runs on pushes/PRs to `master`, `main`, and
 `develop`:
 
-1. **API tests** — 194 tests plus the end-to-end pipeline
+1. **API tests** — 206 tests plus the end-to-end pipeline
 2. **Web build** — `npm ci && npm run build` with the Vercel toolchain
 3. **Docker image** — builds `apps/api/Dockerfile` (no registry push) to prove the Railway image works
 4. **Migrations** — applies pending migrations on `master` when the
@@ -453,7 +453,7 @@ point `DATABASE_URL` at it and skip the Railway plugin.
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | Implemented, 194 tests passing |
+| Scheme dedup, benchmark mapping, features, rules, scoring | Implemented, 206 tests passing |
 | Benchmark TRI ingestion (`NseIndicesFetcher`) | Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `seed_benchmarks.py` backfill |
 | CSV upload/validation/persistence (`/mfd/csv/*`) | Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
 | Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | Columns `benchmark_code,index_date,index_value`; overwrites existing points |
