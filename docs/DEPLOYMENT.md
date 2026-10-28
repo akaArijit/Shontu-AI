@@ -12,6 +12,7 @@ Everything runs on [Railway](https://railway.app): PostgreSQL, the FastAPI backe
 Config files already in the repo:
 
 - `railway.json` — API service build (Dockerfile) + `/health` healthcheck + restart policy
+- `railway.batch.json` — nightly/cron service (no healthcheck, restart Never)
 - `frontend/railway.json` — Nixpacks build, `next start` on `$PORT`
 - `Dockerfile` — installs both `requirements.txt` and `api/requirements.txt`, binds `$PORT`
 
@@ -128,10 +129,14 @@ Then generate a domain, and finally set the API's `ALLOWED_ORIGINS` to that exac
 | Setting | Value |
 |---------|-------|
 | Root directory | `/` |
+| Config-as-code file | `/railway.batch.json` (Settings → Config-as-code) |
 | Builder | Dockerfile |
-| Start command | `python scripts/run_nightly.py` |
+| Start command | `python scripts/run_nightly.py` (from `railway.batch.json`) |
 | Cron schedule | `0 2 * * *` (02:00 UTC = 07:30 IST) |
 | Restart policy | Never (cron services should exit) |
+
+> Pointing the batch service at `railway.batch.json` keeps it from inheriting the
+> API's `/health` check and `ON_FAILURE` restart policy.
 
 Variables: same as the API. No batch-specific variables are required.
 
