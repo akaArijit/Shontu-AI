@@ -1,215 +1,310 @@
-# Deployment Guide — Railway
+# Deployment Guide — Vercel + Railway
 
-Everything runs on [Railway](https://railway.app): PostgreSQL, the FastAPI backend, the nightly batch job, and the Next.js dashboard.
+The production topology is split by workload:
 
-| Component | Technology | Railway service | Root directory |
-|-----------|------------|-----------------|----------------|
-| Database | PostgreSQL 15 | Postgres plugin | — |
-| API | Python 3.11 / FastAPI | `fund-engine-api` (Dockerfile) | `/` |
-| Batch job | Python 3.11 (cron) | `fund-engine-batch` (Dockerfile) | `/` |
-| Frontend | Next.js 14 | `fund-engine-web` (Nixpacks) | `/frontend` |
+| Component | Platform | Root directory | Config |
+|-----------|----------|----------------|--------|
+| Dashboard (Next.js 14) | **Vercel** | `apps/web` | `apps/web/next.config.js`, Vercel env vars |
+| API (FastAPI) | **Railway** (Dockerfile) | `apps/api` | `apps/api/railway.json` |
+| Nightly batch (cron) | **Railway** (Dockerfile) | `apps/api` | `apps/api/railway.batch.json` |
+| PostgreSQL 15 | **Railway** plugin | — | plugin `DATABASE_URL` |
 
 Config files already in the repo:
 
-- `railway.json` — API service build (Dockerfile) + `/health` healthcheck + restart policy
-- `railway.batch.json` — nightly/cron service (no healthcheck, restart Never)
-- `frontend/railway.json` — Nixpacks build, `next start` on `$PORT`
-- `Dockerfile` — installs both `requirements.txt` and `api/requirements.txt`, binds `$PORT`
+- `apps/api/railway.json` — Dockerfile build, `/health` healthcheck, restart policy, 1 replica
+- `apps/api/railway.batch.json` — no healthcheck, restart `NEVER` (cron services must exit)
+- `apps/api/Dockerfile` — installs pipeline + API deps, runs as non-root `appuser`, binds `$PORT`
+- `apps/web/next.config.js` — security headers, `poweredByHeader: false`
+
+Both platforms deploy automatically from GitHub on push to `master`. CI
+(`.github/workflows/ci-cd.yml`) runs tests, a production web build, a Docker
+image build, and pending migrations — it does **not** deploy.
 
 ---
 
 ## Prerequisites
 
-- [Railway account](https://railway.app) + [Railway CLI](https://docs.railway.app/guides/cli) (`npm i -g @railway/cli`)
-- GitHub repo connected: https://github.com/akaArijit/Shontu-AI
-- `psql` locally (optional, for migrations)
-
-```bash
-railway login
-```
+- GitHub repo: `akaArijit/Shontu-AI` (branch `master`)
+- [Railway account](https://railway.app)
+- [Vercel account](https://vercel.com)
+- Railway CLI (optional, for migrations/seeding): `npm i -g @railway/cli`
+- `psql` (optional fallback)
 
 ---
 
-## 1. Create the project and database
+## 1. Railway project + PostgreSQL
 
 1. Railway → **New Project** → **Deploy from GitHub repo** → pick `Shontu-AI`.
-2. In the project canvas: **New** → **Database** → **Add PostgreSQL**.
-3. Railway creates `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` on the Postgres service.
-
-Run migrations against it (in order):
-
-```bash
-railway link                      # select project
-railway service Postgres
-railway run psql "$DATABASE_URL" -f db/migrations/001_initial_schema.sql
-railway run psql "$DATABASE_URL" -f db/migrations/002_indexes.sql
-railway run psql "$DATABASE_URL" -f db/migrations/003_views.sql
-railway run psql "$DATABASE_URL" -f db/migrations/004_mfd_views.sql
-```
-
-Or from the Postgres service shell: `railway connect Postgres` then `\i db/migrations/001_initial_schema.sql`.
+   This first service can be deleted once the API service is created.
+2. **New** → **Database** → **Add PostgreSQL**.
+3. The Postgres service exposes `DATABASE_URL` (and `PGHOST`, `PGPORT`, ...).
+   Reference it from app services as `${{Postgres.DATABASE_URL}}` — never copy
+   the value.
 
 ---
 
-## 2. API service
+## 2. Migrations
 
-If the GitHub import created a service from the repo root, rename it `fund-engine-api` and confirm:
+Migrations live in `apps/api/db/migrations/` (`001` → `004`). Apply them with
+the idempotent runner, which records applied files in `schema_migrations` and
+refuses to re-run modified files.
+
+### Option A — from your machine (recommended)
+
+```bash
+cd apps/api
+pip install psycopg2-binary
+railway login
+railway link                 # select the project
+railway service fund-engine-api
+railway run python scripts/apply_migrations.py --dry-run   # preview
+railway run python scripts/apply_migrations.py             # apply
+```
+
+`railway run` injects the linked service's variables, including
+`DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+
+### Option B — raw psql (fallback)
+
+```bash
+cd apps/api
+railway service Postgres
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/002_indexes.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/003_views.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/004_mfd_views.sql
+```
+
+If you applied the schema manually before adopting the runner, mark it as
+already applied once:
+
+```bash
+railway run python scripts/apply_migrations.py --baseline
+```
+
+CI also applies pending migrations on pushes to `master` when the repository
+secret `DATABASE_URL` is set (use the Postgres **public** URL with SSL).
+
+---
+
+## 3. API service (Railway)
+
+**New** → **GitHub Repo** → same repo. Name it `fund-engine-api`.
 
 | Setting | Value |
 |---------|-------|
-| Source repo / branch | `akaArijit/Shontu-AI` / `master` |
-| Root directory | `/` (repo root) |
-| Builder | Dockerfile (from `railway.json`) |
+| Source | `akaArijit/Shontu-AI` / `master` |
+| Root directory | `apps/api` |
+| Builder | Dockerfile (auto-detected from `apps/api/railway.json`) |
+| Config-as-code | `/railway.json` (default) |
 | Healthcheck path | `/health` |
 | Start command | `sh -c 'uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2'` |
-
-Variables (Settings → Variables):
-
-```bash
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-SCORING_CONFIG_PATH=/app/config/scoring_config.yaml
-RULES_CONFIG_PATH=/app/config/rules.yaml
-BENCHMARK_MAPPINGS_PATH=/app/config/explicit_benchmark_mappings.json
-ALLOWED_ORIGINS=https://<your-frontend-domain>
-```
-
-`PORT` is injected by Railway; config paths default to `./config`, so the path
-variables are optional if you keep that layout.
-
-Then **Settings → Networking → Generate Domain**. Verify:
-
-```bash
-curl https://<api-domain>/health
-# {"status":"healthy","service":"mfd-fund-monitoring-api","version":"1.0.0"}
-curl https://<api-domain>/docs     # OpenAPI UI
-```
-
-> `railway.json` sets `healthcheckPath: /health`, so Railway only promotes a deploy once the app answers 200 there.
-
----
-
-## 3. Frontend service
-
-**New** → **GitHub Repo** → same repo, then:
-
-| Setting | Value |
-|---------|-------|
-| Service name | `fund-engine-web` |
-| Root directory | `/frontend` |
-| Builder | Nixpacks (`frontend/railway.json`) |
-| Build command | `npm ci && npm run build` |
-| Start command | `npx next start -p ${PORT:-3000}` |
-| Healthcheck path | `/` |
 
 Variables:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://<your-api-domain>
-NEXT_PUBLIC_USE_MOCK_API=false
-NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+ALLOWED_ORIGINS=https://<your-frontend-domain>   # update after the Vercel deploy (step 6)
+# Optional: allow Vercel preview deployments
+# ALLOWED_ORIGIN_REGEX=https://fund-engine-[a-z0-9-]+\.vercel\.app
 ```
 
-`NEXT_PUBLIC_*` values are baked in at build time — after changing them, trigger a redeploy (**Deploy → Redeploy**, or push a commit).
+Config paths default to `./config` relative to `apps/api`; the image contains
+`/app/config`, so `SCORING_CONFIG_PATH`, `RULES_CONFIG_PATH`, and
+`BENCHMARK_MAPPINGS_PATH` are optional. `PORT` is injected by Railway.
 
-Then generate a domain, and finally set the API's `ALLOWED_ORIGINS` to that exact origin (scheme `https://`, no trailing slash) and redeploy the API.
+Generate a domain: **Settings → Networking → Generate Domain**. Verify:
 
-> The app calls `NEXT_PUBLIC_API_URL + /api/v1/...`, so set the bare domain (no `/api/v1` suffix).
+```bash
+curl https://<api-domain>/health
+# {"status":"healthy","service":"mfd-fund-monitoring-api","version":"1.0.0"}
+curl https://<api-domain>/docs      # OpenAPI UI
+```
+
+Railway only promotes a deploy once `/health` returns 200.
 
 ---
 
-## 4. Nightly batch / cron service
+## 4. Batch / cron service (Railway)
 
-**New** → **GitHub Repo** → same repo (repo root, Dockerfile builder), name it `fund-engine-batch`.
+**New** → **GitHub Repo** → same repo. Name it `fund-engine-batch`.
 
 | Setting | Value |
 |---------|-------|
-| Root directory | `/` |
+| Root directory | `apps/api` |
 | Config-as-code file | `/railway.batch.json` (Settings → Config-as-code) |
 | Builder | Dockerfile |
 | Start command | `python scripts/run_nightly.py` (from `railway.batch.json`) |
 | Cron schedule | `0 2 * * *` (02:00 UTC = 07:30 IST) |
-| Restart policy | Never (cron services should exit) |
+| Restart policy | **Never** |
+| Healthcheck | none |
 
-> Pointing the batch service at `railway.batch.json` keeps it from inheriting the
-> API's `/health` check and `ON_FAILURE` restart policy.
+> Pointing the batch service at `railway.batch.json` prevents it from
+> inheriting the API's `/health` check and `ON_FAILURE` restart policy. Without
+> `NEVER`, Railway restarts the container after every successful cron run.
 
-**Sizing:** the pipeline loads all active schemes' 6-year NAV/benchmark history
-into memory. Budget ~1 GB for a few hundred schemes; if the service hits its
-memory limit, raise the batch service memory or shorten the lookback
+Variables: same as the API (`DATABASE_URL` + optional config paths). No
+batch-specific variables are required.
+
+**Sizing:** the pipeline loads every active scheme's 6-year NAV/benchmark
+history into memory. Budget ~1 GB for a few hundred schemes. If the service
+hits its memory limit, raise batch memory or shorten the lookback
 (`DEFAULT_LOOKBACK_DAYS` in `db/queries.py` and the benchmark window in
 `scripts/run_nightly.py`). Keep at least 6 years for 5-year metrics.
 
-Variables: same as the API. No batch-specific variables are required.
-
-Keep **Restart policy = Never** and enable **Cron Schedule**; otherwise Railway restarts the container after each successful run. Logs land in the service's **Deployments → Logs**, and nightly files in `logs/`.
-
-Trigger a manual run: **Deploy → Redeploy**, or locally:
+Manual run:
 
 ```bash
-railway link
+cd apps/api
 railway service fund-engine-batch
 railway run python scripts/run_nightly.py --date 2026-10-27
 ```
 
----
-
-## 5. Environment variable reference
-
-| Variable | API | Batch | Frontend | Notes |
-|----------|-----|-------|----------|-------|
-| `DATABASE_URL` | ✅ | ✅ | — | `${{Postgres.DATABASE_URL}}` |
-| `PORT` | auto | auto | auto | Injected by Railway |
-| `ALLOWED_ORIGINS` | ✅ | — | — | Frontend origin(s), comma-separated |
-| `SCORING_CONFIG_PATH` | ✅ | ✅ | — | `/app/config/scoring_config.yaml` |
-| `RULES_CONFIG_PATH` | ✅ | ✅ | — | `/app/config/rules.yaml` |
-| `BENCHMARK_MAPPINGS_PATH` | ✅ | ✅ | — | `…explicit_benchmark_mappings.json` |
-| `NEXT_PUBLIC_API_URL` | — | — | ✅ | Build-time |
-| `NEXT_PUBLIC_USE_MOCK_API` | — | — | ✅ | `false` in production |
-
-Copy `.env.example` for the full list. Never commit real secrets.
+Or **Deployments → Run now** in the Railway dashboard. Logs are under the
+service's **Deployments → Logs**; per-run files under `logs/` inside the
+container.
 
 ---
 
-## 6. CI/CD
+## 5. Dashboard (Vercel)
 
-`.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
+1. Vercel → **Add New → Project** → import `akaArijit/Shontu-AI`.
+2. **Root Directory:** `apps/web` (important — the monorepo root is not a
+   Next.js app).
+3. Framework preset: **Next.js**; build command `npm run build`; install
+   command `npm ci`; Node 20.x.
+4. Environment variables (Production **and** Preview):
 
-1. **test** — `pytest` (187 tests) + e2e pipeline
-2. **docker-build** — builds the image, pushes to GHCR
-3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
-4. **deploy-*** — optional Railway CLI deploys
+   ```bash
+   NEXT_PUBLIC_API_URL=https://<api-domain>       # bare origin, no /api/v1, no trailing slash
+   NEXT_PUBLIC_USE_MOCK_API=false
+   NEXT_PUBLIC_SITE_URL=https://<frontend-domain> # optional, metadata only
+   ```
 
-**Default (recommended): Railway auto-deploy.** In each service: **Settings → Source → Connected branch = `master`**. Every push deploys automatically after CI is green, with zero extra secrets.
+5. Deploy, then copy the resulting production domain.
 
-**Optional: deploy from CI.** Set repository variable `RAILWAY_CLI_DEPLOY=true` and secrets:
+> `NEXT_PUBLIC_*` values are inlined at **build** time. After changing them,
+> trigger **Redeploy** (a plain refresh will not pick them up).
+
+The client calls `NEXT_PUBLIC_API_URL + /api/v1/...` directly from the browser,
+so the API must allow the dashboard origin via CORS (next step). Vercel preview
+deployments use per-branch URLs; add `ALLOWED_ORIGIN_REGEX` on the API if you
+want previews to work.
+
+---
+
+## 6. Wire CORS
+
+On the Railway **API** service:
+
+```bash
+ALLOWED_ORIGINS=https://<frontend-domain>
+ALLOWED_ORIGIN_REGEX=https://fund-engine-[a-z0-9-]+\.vercel\.app
+```
+
+- Exact origins are comma-separated, include the scheme, no trailing slash.
+- `ALLOWED_ORIGIN_REGEX` is optional and only for preview/custom domains.
+- Defaults (no variables) are `http://localhost:3000,http://127.0.0.1:3000`.
+
+Redeploy the API after changing origins. A CORS failure appears in the browser
+console as a blocked request with no `Access-Control-Allow-Origin` header.
+
+---
+
+## 7. Seed a fresh deployment
+
+1. Open `https://<api-domain>/docs` and call
+   `POST /api/v1/mfd/csv/upload/scheme-master` with a scheme master CSV.
+   Get the template from `GET /api/v1/mfd/csv/template`. Use `dry_run=true`
+   first to validate.
+2. Optionally override benchmark mappings with
+   `POST /api/v1/mfd/csv/upload/benchmark-mappings` (`scheme_code,benchmark_code`).
+   Manual mappings survive nightly re-resolution.
+3. Backfill benchmark history (needed for alpha/correlation):
+
+   ```bash
+   cd apps/api
+   railway service fund-engine-batch
+   railway run python scripts/seed_benchmarks.py --years 6 --dry-run
+   railway run python scripts/seed_benchmarks.py --years 6
+   ```
+
+   For CRISIL / S&P 500 (no NSE TRI series), use
+   `POST /api/v1/mfd/csv/upload/benchmark-history` with
+   `benchmark_code,index_date,index_value`.
+4. Run the batch once (**Run now**, or `railway run python scripts/run_nightly.py`).
+   It fetches NAV history from mfapi.in, resolves benchmarks, computes
+   features/rules/scores, and writes `fund_rolling_returns`, `fund_scores`,
+   `fund_alerts`, `pipeline_run_log`. Subsequent runs fetch only new points.
+5. Verify `GET /api/v1/mfd/health` and open the dashboard.
+
+Until real data exists, set `NEXT_PUBLIC_USE_MOCK_API=true` on Vercel and
+redeploy to demo the UI with generated data.
+
+---
+
+## 8. Environment variable reference
+
+| Variable | API | Batch | Web | Notes |
+|----------|-----|-------|-----|-------|
+| `DATABASE_URL` | yes | yes | — | `${{Postgres.DATABASE_URL}}` |
+| `PORT` | auto | auto | auto | Injected by the platform |
+| `ALLOWED_ORIGINS` | yes | — | — | Comma-separated browser origins |
+| `ALLOWED_ORIGIN_REGEX` | optional | — | — | Vercel preview URLs |
+| `SCORING_CONFIG_PATH` | optional | optional | — | `/app/config/scoring_config.yaml` |
+| `RULES_CONFIG_PATH` | optional | optional | — | `/app/config/rules.yaml` |
+| `BENCHMARK_MAPPINGS_PATH` | optional | optional | — | `/app/config/explicit_benchmark_mappings.json` |
+| `NEXT_PUBLIC_API_URL` | — | — | yes | Build-time; bare API origin |
+| `NEXT_PUBLIC_USE_MOCK_API` | — | — | yes | `false` in production |
+| `NEXT_PUBLIC_SITE_URL` | — | — | optional | Metadata/canonical URL |
+
+Templates: [`apps/api/.env.example`](../apps/api/.env.example) and
+[`apps/web/.env.example`](../apps/web/.env.example). Never commit real secrets.
+
+---
+
+## 9. CI/CD
+
+`.github/workflows/ci-cd.yml` runs on pushes/PRs to `master`, `main`, and
+`develop`:
+
+1. **API tests** — 194 tests plus the end-to-end pipeline
+2. **Web build** — `npm ci && npm run build` with the Vercel toolchain
+3. **Docker image** — builds `apps/api/Dockerfile` (no registry push) to prove the Railway image works
+4. **Migrations** — applies pending migrations on `master` when the
+   `DATABASE_URL` repository secret exists
+
+Deployment is intentionally left to the platform Git integrations:
+
+- **Railway:** each service → Settings → Source → branch `master`; every push
+  deploys after build/healthcheck.
+- **Vercel:** project → Git → Production Branch `master`; previews for PRs.
+
+There is no CLI deploy job and no `RAILWAY_TOKEN` requirement. If you prefer a
+manual deploy, run `railway up` from `apps/api` with the target service linked.
+
+Repository secret for CI migrations:
 
 | Secret | Value |
 |--------|-------|
-| `RAILWAY_TOKEN` | Project token (Project Settings → Tokens) |
-| `RAILWAY_API_SERVICE` | API service name, e.g. `fund-engine-api` |
-| `RAILWAY_BATCH_SERVICE` | `fund-engine-batch` |
-| `RAILWAY_FRONTEND_SERVICE` | `fund-engine-web` |
-| `DATABASE_URL` | Postgres public URL (for migrations) |
-
-```bash
-gh variable set RAILWAY_CLI_DEPLOY --body true
-gh secret set RAILWAY_TOKEN
-```
+| `DATABASE_URL` | Postgres **public** URL (SSL enabled) |
 
 ---
 
-## 7. Monitoring
+## 10. Monitoring
 
-### Railway built-ins
-- **Deployments → Logs** — structured app logs per service
-- **Metrics** — CPU, memory, network, restart counts
-- **Healthchecks** — `/health` for API, `/` for frontend; failed checks block promotion
-- **Alerts** — Project Settings → Alerts → email/webhook on deploy failure or resource spikes
+### Platform
+- **Railway → Deployments → Logs** — structured API/batch logs
+- **Railway → Metrics** — CPU, memory, network, restarts
+- **Railway → Project Settings → Alerts** — email/webhook on failures
+- **Vercel → Deployments → Functions/Logs** — build and runtime logs
+- **Vercel → Analytics** — optional Web Vitals
 
-### Application-level checks
+### Application
+
 ```bash
-curl https://<api-domain>/health          # process alive
-curl https://<api-domain>/api/v1/mfd/health   # pipeline freshness
+curl https://<api-domain>/health                # process alive
+curl https://<api-domain>/api/v1/mfd/health     # pipeline freshness
 ```
 
 | Alert | Condition |
@@ -217,17 +312,18 @@ curl https://<api-domain>/api/v1/mfd/health   # pipeline freshness
 | API down | `/health` != 200 for 2 min |
 | Batch failed | cron run exit code != 0 |
 | Stale data | `max(fund_scores.as_of_date) < today - 1` |
-| Error rate | 5xx > 5% over 5 min (Railway metrics) |
+| Error rate | 5xx > 5% over 5 min |
 
 ---
 
-## 8. Backups & recovery
+## 11. Backups & recovery
 
-Railway Postgres supports scheduled backups on paid plans (Project → Postgres → Backups). Also take manual dumps:
+Railway Postgres supports scheduled backups on paid plans. Also take manual
+dumps:
 
 ```bash
 railway service Postgres
-railway run pg_dump "$DATABASE_URL" --no-owner --no-acl > backup_$(date +%Y%m%d).sql
+railway run pg_dump "$DATABASE_URL" --no-owner --no-acl > backup_20261027.sql
 ```
 
 Restore:
@@ -236,131 +332,127 @@ Restore:
 railway run psql "$DATABASE_URL" < backup_20261027.sql
 ```
 
-Targets: RTO < 2 h, RPO < 24 h. Keep the last 7 daily + 4 weekly dumps in object storage.
+Targets: RTO < 2 h, RPO < 24 h. Keep the last 7 daily + 4 weekly dumps in
+object storage. Vercel has no persistent state — the dashboard is stateless.
 
 ---
 
-## 9. Security
+## 12. Security
 
-- Services communicate over Railway's private network — use `${{Postgres.DATABASE_URL}}`, not the public proxy, from API/batch
-- Only the frontend domain should be public; keep the API behind HTTPS + `ALLOWED_ORIGINS`
-- TLS terminated by Railway for all generated domains
-- Postgres: encryption at rest, no public access unless you enable TCP Proxy
-- Secrets only in Railway variables; rotate `RAILWAY_TOKEN` quarterly
-- Non-root container user (`appuser`) in `Dockerfile`
-- **No user authentication in v1** — CORS only limits browser origins. Share the API
-  URL only with the dashboard build; add an auth layer before exposing it to clients.
+- API and batch talk to Postgres over Railway's private network; use
+  `${{Postgres.DATABASE_URL}}`, not the public proxy.
+- Only the Vercel domain needs to be public; the API can stay on its Railway
+  domain with CORS restricted to the dashboard origins.
+- TLS is terminated by Railway/Vercel for generated domains.
+- Postgres is encrypted at rest; leave the TCP proxy disabled unless needed.
+- Secrets live only in platform variables; rotate database credentials if a
+  token leaks.
+- The API container runs as non-root `appuser`.
+- Security headers are set in `apps/web/next.config.js` (HSTS, `X-Frame-Options`,
+  `nosniff`, referrer and permissions policies).
+- **No user authentication in v1.** CORS restricts browser origins but is not
+  auth. Treat the dashboard/API as internal, keep URLs private, and add an auth
+  layer (e.g. Vercel Password Protection or an API gateway) before exposing
+  client data.
 
 ---
 
-## 10. Scaling
+## 13. Scaling
 
 | Component | Capacity | Trigger |
 |-----------|----------|---------|
-| API | ~1000 RPS | CPU > 70% → raise replicas (Railway: Settings → Replicas) |
-| Batch | 500 schemes in ~20 min | runtime > 20 min → parallelise feature engineering |
+| API | ~1,000 RPS | CPU > 70% → raise replicas (Railway → Settings → Replicas) |
+| Batch | ~500 schemes / ~20 min | runtime > 20 min → parallelise feature engineering |
 | Postgres | 100 GB | storage > 80% → upgrade plan |
+| Dashboard | Vercel edge CDN | serverless functions scale automatically |
 
-`railway.json` pins `numReplicas: 1`; scale via the dashboard when needed.
-
----
-
-## 11. Rollback
-
-- **Service rollback**: Deployments → pick previous successful deploy → **Redeploy**
-- **CLI**: `railway rollback` (interactive) or `railway redeploy --service <name>`
-- **Code**: `git revert <sha> && git push` (Railway redeploys automatically)
-- **Database**: restore the last dump (no automatic PITR on the free tier)
+`railway.json` pins `numReplicas: 1` to keep DB load predictable; raise it in
+the Railway dashboard when needed. Multiple API replicas are safe (stateless).
 
 ---
 
-## 12. Troubleshooting
+## 14. Rollback
+
+- **Railway:** Deployments → pick a previous successful deploy → **Redeploy**
+- **Vercel:** Deployments → previous deployment → **Promote to Production**
+- **Code:** `git revert <sha> && git push` (both platforms redeploy)
+- **Database:** restore the last dump. Migrations are additive; the runner
+  records checksums, so do not edit an applied file — add a new migration.
+
+---
+
+## 15. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Deploy fails at healthcheck | App not binding `$PORT` | Keep the `--port ${PORT:-8000}` start command |
-| `502` on API domain | Container crashed on boot | Check Logs; usually missing `python-multipart`, `DATABASE_URL`, or a bad import |
-| CORS error in browser | `ALLOWED_ORIGINS` mismatch | Set exact origin incl. scheme, then redeploy API |
-| Frontend shows zeros / mock data | `NEXT_PUBLIC_USE_MOCK_API=true` or API URL stale | Fix variable, **rebuild** (values are inlined) |
-| `railway up` uploads `node_modules` | `.gitignore` not respected | Ensure `frontend/node_modules` and `.next` stay ignored |
+| Railway build fails "Dockerfile not found" | Root directory not `apps/api` | Set service root to `apps/api` |
+| Deploy fails at healthcheck | App not binding `$PORT` | Keep `--port ${PORT:-8000}` |
+| `502` on API domain | Container crashed on boot | Check logs; missing `python-multipart`, `DATABASE_URL`, or bad import |
+| CORS error in browser | `ALLOWED_ORIGINS` mismatch | Set the exact Vercel origin (scheme, no trailing slash) and redeploy API |
+| CORS works on prod but not previews | Preview URL not allowed | Add `ALLOWED_ORIGIN_REGEX` |
+| Dashboard shows zeros / mock data | `NEXT_PUBLIC_USE_MOCK_API=true` or stale API URL | Fix Vercel env, then **Redeploy** (values are inlined) |
+| Vercel build "No Next.js version detected" | Root directory not `apps/web` | Set project root to `apps/web` |
+| Vercel build calls localhost API | `NEXT_PUBLIC_API_URL` missing at build | Add it to Production + Preview, redeploy |
 | Cron runs every few minutes | Restart policy not `Never` | Settings → Restart Policy → Never |
-| Migrations not applied | `migrate-db` skipped | Run the `psql` commands above manually |
-| Slow dashboard | Missing indexes | Re-run `db/migrations/002_indexes.sql` |
+| Migrations not applied | Runner skipped / no secret | Run `scripts/apply_migrations.py` manually |
+| Slow dashboard | Missing indexes | Re-run `002_indexes.sql` |
+| Batch OOM | 6-year history too large | Raise memory or shorten lookback |
+| NSE benchmark fetch fails | Unofficial endpoint / rate limit | Retry; CSV-import the missing history |
 
 ---
 
-## 13. Operations runbook
+## 16. Operations runbook
 
 | Task | Command |
 |------|---------|
-| Run pipeline manually | `railway run python scripts/run_nightly.py` |
-| Retune scoring weights | Edit `config/scoring_config.yaml` → push (auto-redeploy batch) |
-| Add alert rule | Edit `config/rules.yaml` → push |
-| Update benchmark mapping | Edit `config/explicit_benchmark_mappings.json` → push |
+| Apply migrations | `cd apps/api && railway run python scripts/apply_migrations.py` |
+| Preview migrations | `... --dry-run` |
+| Run pipeline manually | `cd apps/api && railway run python scripts/run_nightly.py` |
+| Backfill benchmarks | `cd apps/api && railway run python scripts/seed_benchmarks.py --years 6` |
+| Retune scoring weights | Edit `apps/api/config/scoring_config.yaml` → push |
+| Add alert rule | Edit `apps/api/config/rules.yaml` → push |
+| Update benchmark mapping | Edit `apps/api/config/explicit_benchmark_mappings.json` → push |
 | Refresh materialized views | `railway run psql "$DATABASE_URL" -c "SELECT refresh_mfd_materialized_views();"` |
 | Check pipeline health | `curl https://<api-domain>/api/v1/mfd/health` |
-| Tail logs | `railway logs --service fund-engine-api` |
+| Tail API logs | `railway logs --service fund-engine-api` |
 | Open a DB shell | `railway connect Postgres` |
 | List variables | `railway variables --service fund-engine-api` |
+| Redeploy dashboard | Vercel → Deployments → Redeploy |
 
 ---
 
-## 14. Cost estimate
-
-Railway bills by usage (vCPU-minutes, GB-minutes, egress) plus plan fee; Postgres counts as a service.
+## 17. Cost estimate
 
 | Item | Approx. monthly |
 |------|-----------------|
-| Hobby plan (includes usage credit) | $5 |
+| Railway Hobby plan (includes usage credit) | $5 |
 | API service (small, always on) | $3–8 |
-| Frontend service | $2–6 |
-| Batch cron (≤ 300 runs-min/day) | $1–3 |
+| Batch cron (≤ 300 run-min/day) | $1–3 |
 | Postgres (1 GB) | ~$2–5 |
-| **Total** | **~$13–27** |
+| Vercel Hobby/Pro | $0–20 |
+| **Total** | **~$11–41** |
 
-Verify current pricing at https://railway.app/pricing. Supabase remains an option if you prefer a managed DB with PITR — point `DATABASE_URL` at it and skip the Postgres plugin.
+Verify current pricing at https://railway.app/pricing and
+https://vercel.com/pricing. Supabase remains an option for Postgres with PITR:
+point `DATABASE_URL` at it and skip the Railway plugin.
 
 ---
 
-## 15. Current implementation status (read before go-live)
-
-Deployment plumbing and the data layer are complete:
+## 18. Implementation status (read before go-live)
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 187 tests passing |
-| Benchmark TRI ingestion (`NseIndicesFetcher`) | ✅ Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `scripts/seed_benchmarks.py` backfill |
-| CSV upload/validation/persistence (`/mfd/csv/*`) | ✅ Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
-| Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | ✅ Columns `benchmark_code,index_date,index_value`; overwrites existing points |
-| CSV export (`/mfd/csv/download/scheme-master`) | ✅ Reads `scheme_master`; falls back to the template when the DB is empty |
-| `/health`, `/` | ✅ Working |
-| `/api/v1/mfd/health` | ✅ Queries `pipeline_run_log`; returns `degraded` when DB is empty/unreachable |
-| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | ✅ DB-backed (see `api/repository.py`) |
-| `scripts/run_nightly.py` | ✅ Full orchestration + persistence (`db/persistence.py`, `db/writer.py`) |
-| Frontend | ✅ Builds and runs; shows empty states when the API has no data |
-
-### Seeding a fresh deployment
-
-1. Open `/api/v1/docs` and call `POST /api/v1/mfd/csv/upload/scheme-master` with a
-   scheme master CSV (template: `GET /api/v1/mfd/csv/template`). Set
-   `dry_run=true` first to validate.
-2. Optionally override benchmarks with
-   `POST /api/v1/mfd/csv/upload/benchmark-mappings` (`scheme_code,benchmark_code`).
-   Manual mappings are preserved by the nightly resolver.
-3. Backfill benchmark history once (needed for alpha/correlation metrics):
-   - Preferred: run `python scripts/seed_benchmarks.py --years 6` inside the batch
-     service (`railway run` from the repo root, or a one-off Railway shell). It
-     resolves benchmark codes from `scheme_master`, writes `benchmark_master`
-     placeholders and upserts `benchmark_history`.
-   - Offline/alternative: `POST /api/v1/mfd/csv/upload/benchmark-history` with
-     `benchmark_code,index_date,index_value`. Use this for CRISIL/S&P benchmarks
-     that niftyindices.com does not publish.
-4. Run the batch service once (Railway → `fund-engine-batch` → *Run now*). It
-   fetches NAV history from mfapi.in, computes features/rules/scores and writes
-   `fund_rolling_returns`, `fund_scores`, `fund_alerts`, `pipeline_run_log`.
-   Later nightly runs fetch only new NAV/benchmark points.
-5. Re-run the frontend only if you changed `NEXT_PUBLIC_*` variables (they are
-   baked in at build time).
+| Scheme dedup, benchmark mapping, features, rules, scoring | Implemented, 194 tests passing |
+| Benchmark TRI ingestion (`NseIndicesFetcher`) | Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `seed_benchmarks.py` backfill |
+| CSV upload/validation/persistence (`/mfd/csv/*`) | Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
+| Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | Columns `benchmark_code,index_date,index_value`; overwrites existing points |
+| CSV export (`/mfd/csv/download/scheme-master`) | Reads `scheme_master`; falls back to the template when empty |
+| `/health`, `/` | Working |
+| `/api/v1/mfd/health` | Queries `pipeline_run_log`; `degraded` when DB is empty/unreachable |
+| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | DB-backed (see `api/repository.py`) |
+| `scripts/run_nightly.py` | Full orchestration + persistence |
+| `scripts/apply_migrations.py` | Idempotent runner with checksum tracking |
+| Frontend | Builds on Vercel; empty states when the API has no data; error/not-found/loading boundaries |
 
 ### Known limitations
 
@@ -369,9 +461,8 @@ Deployment plumbing and the data layer are complete:
   import as the fallback.
 - CRISIL and S&P 500 benchmarks have no NSE TRI series and must be loaded via
   `POST /api/v1/mfd/csv/upload/benchmark-history`.
-- Docker is not installed on the development machine, so the Railway image build
-  is validated by CI (GitHub Actions) rather than locally.
-
-Until real data exists, set `NEXT_PUBLIC_USE_MOCK_API=true` on the frontend
-service to demo the UI with generated data.
-
+- RBI/MOSPI/FBIL macro fetchers are declared but not implemented; macro panels
+  read whatever is in `macro_indicators` and are not used by scoring.
+- No user authentication (see Security).
+- Docker is not installed on the development machine; the image is validated by
+  CI (`Docker image` job) rather than locally.

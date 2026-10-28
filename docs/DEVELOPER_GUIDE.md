@@ -1,53 +1,71 @@
 # Developer Guide
 
+## Repository layout
+
+This is a monorepo: the backend lives in `apps/api` (FastAPI + batch pipeline,
+deployed to Railway) and the dashboard in `apps/web` (Next.js, deployed to
+Vercel). Run backend commands from `apps/api` and frontend commands from
+`apps/web`.
+
 ## Quick Start
 
 ### Prerequisites
 - Python 3.11+
 - PostgreSQL 15+ (or Supabase)
-- Node.js 18+ (for API/frontend)
+- Node.js 20+
 
 ### Installation
 
 ```bash
-# Clone and setup
+# Clone
 git clone <repo>
 cd fund-engine
 
 # Python dependencies
-pip install -r requirements.txt
+cd apps/api
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+source .venv/bin/activate
+pip install -r requirements.txt -r api/requirements.txt
 
-# Node dependencies (for API)
-cd api && npm install
+# Frontend dependencies
+cd ../web
+npm ci
 
-# Run tests
-python -m pytest resolution ingestion features rules scoring test_e2e_pipeline.py db/test_persistence.py api scripts/test_pipeline.py scripts/test_seed_benchmarks.py -v
+# Backend tests (from apps/api)
+cd ../api
+python -m pytest resolution ingestion features rules scoring db api scripts test_e2e_pipeline.py -v
 ```
 
 ### Project Structure
 ```
 fund-engine/
-├── resolution/          # Scheme dedup + benchmark mapping
-├── ingestion/           # Data fetchers (AMFI, mfapi, NSE TRI, etc.)
-├── features/            # Feature engineering pipeline
-├── rules/               # Rule engine (alerts)
-├── scoring/             # Scoring engine (0-100)
-├── api/                 # FastAPI service (routes, repository)
-├── db/                  # Migrations, persistence, DB readers
-├── frontend/            # Next.js dashboard
-├── docs/                # Documentation
-├── config/              # YAML/JSON config
-├── scripts/             # Nightly pipeline + benchmark backfill
-└── test_e2e_pipeline.py # End-to-end integration test
+├── apps/
+│   ├── api/                 # FastAPI + pipeline (Railway)
+│   │   ├── api/             # routes, repository, CORS, tests
+│   │   ├── config/          # YAML/JSON config
+│   │   ├── db/              # migrations, persistence, readers
+│   │   ├── features/        # Feature engineering pipeline
+│   │   ├── ingestion/       # Data fetchers (AMFI, mfapi, NSE TRI)
+│   │   ├── resolution/      # Scheme dedup + benchmark mapping
+│   │   ├── rules/           # Rule engine (alerts)
+│   │   ├── scoring/         # Scoring engine (0-100)
+│   │   ├── scripts/         # Nightly pipeline, seed, migrations
+│   │   └── test_e2e_pipeline.py
+│   └── web/                 # Next.js dashboard (Vercel)
+├── docs/                    # Documentation
+├── docker-compose.yml       # Local Postgres + API + batch
+└── package.json             # Root convenience scripts
 ```
 
 ---
 
 ## Running the Pipeline
 
+Run these commands from `apps/api`.
+
 ### Full Nightly Run (Production)
 ```bash
-# From project root
 python scripts/run_nightly.py --date 2024-01-15
 ```
 

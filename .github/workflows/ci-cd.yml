@@ -1,6 +1,12 @@
-# GitHub Actions - CI/CD Pipeline for MFD Fund Monitoring
+# GitHub Actions - CI for the Fund Engine monorepo
+#
+# Deployment is handled by the platforms' Git integrations:
+#   - apps/web  -> Vercel (root directory: apps/web)
+#   - apps/api  -> Railway (root directory: apps/api; API + batch services)
+#
+# This workflow only verifies code. It never deploys.
 
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
@@ -11,15 +17,18 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
 
 jobs:
   # ============================================================
-  # TESTS
+  # BACKEND - lint/tests/e2e
   # ============================================================
-  test:
-    name: Run Tests
+  api:
+    name: API tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,22 +37,24 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          cache: pip
+          cache-dependency-path: |
+            apps/api/requirements.txt
+            apps/api/api/requirements.txt
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install -r api/requirements.txt
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r api/requirements.txt
 
-      - name: Run unit tests
+      - name: Run test suite
         run: |
-          python -m pytest resolution/ ingestion/ features/ rules/ scoring/ db/ api/ scripts/ -v --tb=short
+          python -m pytest resolution/ ingestion/ features/ rules/ scoring/ db/ api/ scripts/ test_e2e_pipeline.py -q
 
-      - name: Run integration test
-        run: |
-          python test_e2e_pipeline.py
+      - name: Run end-to-end pipeline
+        run: python test_e2e_pipeline.py
 
-      - name: Check code formatting (informational)
+      - name: Check formatting (informational)
         continue-on-error: true
         run: |
           pip install black isort
@@ -51,11 +62,40 @@ jobs:
           isort --check-only .
 
   # ============================================================
-  # DOCKER BUILD
+  # FRONTEND - Vercel-equivalent production build
   # ============================================================
-  docker-build:
-    name: Build Docker Image
-    needs: test
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (production)
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_USE_MOCK_API: 'false'
+        run: npm run build
+
+  # ============================================================
+  # BACKEND IMAGE - proves the Railway/Dockerfile build works
+  # ============================================================
+  docker:
+    name: Docker image
+    needs: api
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     steps:
@@ -65,116 +105,27 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
+      - name: Build image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          context: ./apps/api
+          file: ./apps/api/Dockerfile
+          push: false
+          tags: fund-engine-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   # ============================================================
-  # DEPLOY TO RAILWAY
-  # Recommended: connect each Railway service to this repo (Settings →
-  # Source) and let Railway auto-deploy on push to the tracked branch.
-  # The CLI jobs below are optional; set repo variable
-  # RAILWAY_CLI_DEPLOY=true (plus RAILWAY_TOKEN secret) to use them.
-  # ============================================================
-  deploy-api:
-    name: Deploy API to Railway (optional)
-    needs: docker-build
-    if: github.ref == 'refs/heads/master' && vars.RAILWAY_CLI_DEPLOY == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Deploy API service
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_API_SERVICE }}
-        run: npx --yes @railway/cli up --ci --service "$RAILWAY_SERVICE"
-
-  # ============================================================
-  # DEPLOY BATCH / CRON SERVICE TO RAILWAY
-  # ============================================================
-  deploy-batch:
-    name: Deploy Batch Job to Railway (optional)
-    needs: docker-build
-    if: github.ref == 'refs/heads/master' && vars.RAILWAY_CLI_DEPLOY == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Deploy batch service
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_BATCH_SERVICE }}
-        run: npx --yes @railway/cli up --ci --service "$RAILWAY_SERVICE"
-
-  # ============================================================
-  # DEPLOY FRONTEND TO RAILWAY
-  # ============================================================
-  deploy-frontend:
-    name: Deploy Frontend to Railway (optional)
-    needs: docker-build
-    if: github.ref == 'refs/heads/master' && vars.RAILWAY_CLI_DEPLOY == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Deploy frontend service
-        working-directory: ./frontend
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_FRONTEND_SERVICE }}
-        run: npx --yes @railway/cli up --ci --service "$RAILWAY_SERVICE"
-
-  # ============================================================
-  # DATABASE MIGRATIONS
+  # MIGRATIONS - idempotent runner tracks applied files
   # ============================================================
   migrate-db:
-    name: Run Database Migrations
-    needs: test
-    if: github.ref == 'refs/heads/master'
+    name: Apply database migrations
+    needs: api
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: apps/api
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -184,33 +135,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Install psycopg2
         run: pip install psycopg2-binary
 
-      - name: Run migrations
+      - name: Apply pending migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          for migration in db/migrations/*.sql; do
-            echo "Running $migration"
-            psql "$DATABASE_URL" -f "$migration"
-          done
-
-  # ============================================================
-  # NOTIFICATIONS
-  # ============================================================
-  notify:
-    name: Send Notification
-    needs: [deploy-api, deploy-batch, deploy-frontend, migrate-db]
-    if: always()
-    runs-on: ubuntu-latest
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-    steps:
-      - name: Send Slack notification
-        if: env.SLACK_WEBHOOK_URL != ''
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          channel: '#deployments'
-          text: "MFD Fund Monitoring ${{ job.status }} - ${{ github.ref }}"
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL secret is not set - skipping migrations."
+            exit 0
+          fi
+          python scripts/apply_migrations.py

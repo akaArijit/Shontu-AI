@@ -16,12 +16,16 @@ dist/
 build/
 *.egg-info/
 pip-wheel-metadata/
+*.whl
+*.tar.gz
 
 # Testing
 .coverage
 htmlcov/
 .pytest_cache/
 .tox/
+coverage.xml
+*.cover
 
 # IDE
 .vscode/
@@ -38,10 +42,16 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+apps/web/.env.local
+apps/web/.env.production.local
+apps/web/.env.development.local
+apps/web/.env.test.local
 
 # Logs
 *.log
 logs/
+apps/api/logs/
+npm-debug.log*
 
 # Data files (generated)
 data/*.json
@@ -57,34 +67,21 @@ models/
 *.pkl
 *.joblib
 
-# Build outputs
-dist/
-build/
-*.egg-info/
-
 # Temporary files
 tmp/
 temp/
 *.tmp
 
-# IDE specific
-.vscode/settings.json
-.idea/workspace.xml
-
-# Coverage reports
-coverage.xml
-*.cover
-
-# Distribution packages
-*.whl
-*.tar.gz
-
 # Frontend
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/build/
-frontend/.turbo/
-frontend/coverage/
-frontend/.env.local
-frontend/*.log
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+apps/web/.turbo/
+apps/web/coverage/
+apps/web/next-env.d.ts
+apps/web/*.log
+
+# Vercel
+.vercel/
+apps/web/.vercel/

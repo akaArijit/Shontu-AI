@@ -15,7 +15,15 @@ import type {
   MacroData,
 } from '@/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const API_BASE = RAW_API_BASE.replace(/\/+$/, '');
+
+if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
+  console.warn(
+    '[API] NEXT_PUBLIC_API_URL is not set; falling back to http://localhost:8000. ' +
+      'Set it in Vercel and redeploy.'
+  );
+}
 
 // Real API client
 const apiClient = axios.create({

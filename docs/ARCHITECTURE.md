@@ -362,10 +362,10 @@ GET /api/v1/clients/{client_id}/portfolio?as_of_date=2024-01-15
 | Component | Platform | Notes |
 |-----------|----------|-------|
 | Database | Railway PostgreSQL (Supabase optional) | Managed, scheduled backups |
-| Batch Jobs | Railway cron service | Nightly 02:00 UTC (07:30 IST) |
-| API | Railway (FastAPI + Dockerfile) | `railway.json` healthcheck `/health` |
-| Frontend | Railway (Next.js, Nixpacks) | `frontend/railway.json` |
-| Scheduler | Railway cron schedule | Triggers Python batch |
+| API | Railway (FastAPI + Dockerfile) | `apps/api/railway.json`, healthcheck `/health` |
+| Batch Jobs | Railway cron service | `apps/api/railway.batch.json`, nightly 02:00 UTC (07:30 IST) |
+| Frontend | Vercel (Next.js) | Root directory `apps/web` |
+| Scheduler | Railway cron schedule | Triggers the Python batch |
 
 ### Environment Variables
 ```bash
@@ -379,19 +379,24 @@ BENCHMARK_MAPPINGS_PATH=/app/config/explicit_benchmark_mappings.json
 
 # API
 PORT=8000
-ALLOWED_ORIGINS=https://fund-engine-web.up.railway.app
+ALLOWED_ORIGINS=https://<your-app>.vercel.app
+# ALLOWED_ORIGIN_REGEX=https://fund-engine-[a-z0-9-]+\.vercel\.app
+
+# Frontend (Vercel, build-time)
+NEXT_PUBLIC_API_URL=https://<your-api>.up.railway.app
+NEXT_PUBLIC_USE_MOCK_API=false
 ```
 
 ### Nightly Job Schedule
 ```
-02:00 AM ──► Ingestion (AMFI, mfapi, NSE, RBI, MOSPI, FBIL)
-02:30 AM ──► Resolution (Dedup + Benchmark Map)
-02:45 AM ──► Feature Engineering (Rolling returns, alpha, DD, vol, pctl)
-03:15 AM ──► Rule Engine (Evaluate 9 alert rules)
-03:20 AM ──► Scoring Engine (Calculate 0-100 scores)
-03:25 AM ──► Persist to PostgreSQL (fund_scores, fund_alerts, fund_rolling_returns)
-03:30 AM ──► Refresh materialized views / API cache
-03:35 AM ──► Notification queue (WhatsApp/email for new alerts)
+02:00 AM  -> Ingestion (AMFI, mfapi, NSE, RBI, MOSPI, FBIL)
+02:30 AM  -> Resolution (Dedup + Benchmark Map)
+02:45 AM  -> Feature Engineering (Rolling returns, alpha, DD, vol, pctl)
+03:15 AM  -> Rule Engine (Evaluate 9 alert rules)
+03:20 AM  -> Scoring Engine (Calculate 0-100 scores)
+03:25 AM  -> Persist to PostgreSQL (fund_scores, fund_alerts, fund_rolling_returns)
+03:30 AM  -> Refresh materialized views / API cache
+03:35 AM  -> Notification queue (WhatsApp/email for new alerts)
 ```
 
 ---

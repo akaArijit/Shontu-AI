@@ -39,19 +39,29 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS configuration for internal MFD dashboard
-# Comma-separated list, e.g. "https://web.up.railway.app,http://localhost:3000"
-_allowed_origins = [
-    origin.strip()
-    for origin in os.getenv(
-        "ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
-    ).split(",")
-    if origin.strip()
-]
+# CORS configuration for the dashboard.
+# ALLOWED_ORIGINS: comma-separated exact origins, e.g.
+#   "https://fund-engine.vercel.app,http://localhost:3000"
+# ALLOWED_ORIGIN_REGEX: optional regex for preview deployments, e.g.
+#   "https://fund-engine-[a-z0-9-]+\\.vercel\\.app"
+def get_cors_settings() -> tuple[list[str], str | None]:
+    origins = [
+        origin.strip()
+        for origin in os.getenv(
+            "ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+        ).split(",")
+        if origin.strip()
+    ]
+    regex = os.getenv("ALLOWED_ORIGIN_REGEX", "").strip() or None
+    return origins, regex
+
+
+_allowed_origins, _allowed_origin_regex = get_cors_settings()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=_allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

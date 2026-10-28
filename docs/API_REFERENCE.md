@@ -2,16 +2,19 @@
 
 ## Base URL
 ```
-Production:  https://api.fundmonitor.example.com/api/v1
-Development: http://localhost:3000/api/v1
+Production:  https://<api-domain>/api/v1
+Development: http://localhost:8000/api/v1
 ```
 
+The MFD dashboard uses the `/api/v1/mfd/*` routes. The live, authoritative
+contract is the OpenAPI schema at `/docs` (or `/openapi.json`);
+the examples below describe the original resource model.
+
 ## Authentication
-All endpoints require API key in header:
-```
-Authorization: Bearer <API_KEY>
-```
-Or query parameter: `?api_key=<API_KEY>`
+v1 has **no user authentication** — it is an internal-only deployment. CORS
+(`ALLOWED_ORIGINS`) restricts which browser origins can call the API, but it is
+not an authentication mechanism. Keep the API URL private and add an auth layer
+before exposing client data.
 
 ---
 

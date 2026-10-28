@@ -11,13 +11,6 @@ __pycache__
 .coverage
 htmlcov
 
-frontend/node_modules
-frontend/.next
-frontend/out
-frontend/coverage
-frontend/*.log
-frontend/.env.local
-
 logs
 *.log
 data
