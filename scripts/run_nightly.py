@@ -255,6 +255,19 @@ class PipelineRunner:
                     for scheme in schemes
                 }
             )
+        else:
+            # Some schemes may be manually mapped while others are not. Fetch
+            # the union so newly resolved benchmarks have data on the same run.
+            resolved = {
+                self.benchmark.resolve(
+                    scheme["scheme_code"],
+                    scheme["scheme_name"],
+                    scheme.get("category") or "Unclassified",
+                ).benchmark_code.value
+                for scheme in schemes
+                if not scheme.get("benchmark_index")
+            }
+            benchmark_codes = sorted(set(benchmark_codes) | resolved)
 
         if benchmark_codes:
             from_date = self.as_of_date - timedelta(days=365 * 6)

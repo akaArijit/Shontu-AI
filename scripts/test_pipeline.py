@@ -304,6 +304,27 @@ def test_first_run_resolves_benchmarks_before_fetching():
     }
 
 
+def test_ingestion_fetches_resolved_benchmarks_alongside_manual_mappings():
+    """Fresh CSV with partial manual mappings: fetch manual + newly resolved."""
+    schemes = [
+        {**SCHEMES[0], "benchmark_index": "CRISIL_HYBRID_35_65"},
+        {**SCHEMES[1], "benchmark_index": None},
+        {**SCHEMES[2], "benchmark_index": None},
+    ]
+    reader = FakeReader(
+        schemes, _all_nav_rows(), _benchmark_rows("CRISIL_HYBRID_35_65")
+    )
+    runner, _, _, fetcher = _build_ingesting_runner(reader=reader)
+
+    runner.run()
+
+    assert fetcher.benchmark_calls[0]["codes"] == [
+        "CRISIL_HYBRID_35_65",
+        "NIFTY100_TRI",
+        "NIFTY500_TRI",
+    ]
+
+
 def test_ingestion_passes_stored_dates_for_incremental_fetch():
     dated_reader = DatedFakeReader(SCHEMES, _all_nav_rows(), [])
     runner, _, _, fetcher = _build_ingesting_runner(reader=dated_reader)

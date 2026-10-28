@@ -133,13 +133,7 @@ Then generate a domain, and finally set the API's `ALLOWED_ORIGINS` to that exac
 | Cron schedule | `0 2 * * *` (02:00 UTC = 07:30 IST) |
 | Restart policy | Never (cron services should exit) |
 
-Variables: same as the API plus:
-
-```bash
-PIPELINE_TIMEOUT_SECONDS=1800
-INGESTION_MAX_RETRIES=3
-INGESTION_RETRY_DELAY_SECONDS=5
-```
+Variables: same as the API. No batch-specific variables are required.
 
 Keep **Restart policy = Never** and enable **Cron Schedule**; otherwise Railway restarts the container after each successful run. Logs land in the service's **Deployments → Logs**, and nightly files in `logs/`.
 
@@ -160,14 +154,11 @@ railway run python scripts/run_nightly.py --date 2026-10-27
 | `DATABASE_URL` | ✅ | ✅ | — | `${{Postgres.DATABASE_URL}}` |
 | `PORT` | auto | auto | auto | Injected by Railway |
 | `ALLOWED_ORIGINS` | ✅ | — | — | Frontend origin(s), comma-separated |
-| `JWT_SECRET` / `API_KEY_SALT` | ✅ | — | — | Rotate quarterly |
 | `SCORING_CONFIG_PATH` | ✅ | ✅ | — | `/app/config/scoring_config.yaml` |
 | `RULES_CONFIG_PATH` | ✅ | ✅ | — | `/app/config/rules.yaml` |
 | `BENCHMARK_MAPPINGS_PATH` | ✅ | ✅ | — | `…explicit_benchmark_mappings.json` |
 | `NEXT_PUBLIC_API_URL` | — | — | ✅ | Build-time |
 | `NEXT_PUBLIC_USE_MOCK_API` | — | — | ✅ | `false` in production |
-| `MFAPI_BASE_URL` | ✅ | ✅ | — | `https://api.mfapi.in/mf` |
-| `PIPELINE_TIMEOUT_SECONDS` | — | ✅ | — | Default 1800 |
 
 Copy `.env.example` for the full list. Never commit real secrets.
 
@@ -177,7 +168,7 @@ Copy `.env.example` for the full list. Never commit real secrets.
 
 `.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
 
-1. **test** — `pytest` (183 tests) + e2e pipeline
+1. **test** — `pytest` (184 tests) + e2e pipeline
 2. **docker-build** — builds the image, pushes to GHCR
 3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
 4. **deploy-*** — optional Railway CLI deploys
@@ -329,7 +320,7 @@ Deployment plumbing and the data layer are complete:
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 183 tests passing |
+| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 184 tests passing |
 | Benchmark TRI ingestion (`NseIndicesFetcher`) | ✅ Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `scripts/seed_benchmarks.py` backfill |
 | CSV upload/validation/persistence (`/mfd/csv/*`) | ✅ Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
 | Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | ✅ Columns `benchmark_code,index_date,index_value`; overwrites existing points |
