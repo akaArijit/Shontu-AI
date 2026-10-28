@@ -72,6 +72,16 @@ class DatabaseReader:
                 """)
             return {r["scheme_code"]: r["latest"] for r in cur.fetchall()}
 
+    def latest_benchmark_dates(self) -> dict[str, date]:
+        """Latest stored index date per benchmark (for incremental ingestion)."""
+        with get_cursor() as cur:
+            cur.execute("""
+                SELECT benchmark_code, MAX(index_date) AS latest
+                FROM benchmark_history
+                GROUP BY benchmark_code
+                """)
+            return {r["benchmark_code"]: r["latest"] for r in cur.fetchall()}
+
     def benchmark_codes(self) -> list[str]:
         with get_cursor() as cur:
             cur.execute("""

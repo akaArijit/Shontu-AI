@@ -61,16 +61,27 @@ class MarketDataFetcher:
         return rows, errors
 
     def fetch_benchmarks(
-        self, benchmark_codes: Sequence[str], from_date, to_date
+        self,
+        benchmark_codes: Sequence[str],
+        from_date,
+        to_date,
+        since: Optional[dict[str, object]] = None,
     ) -> tuple[list[dict], list[str]]:
-        """Fetch benchmark index history. NSE integration is optional."""
+        """Fetch benchmark TRI history. Returns (rows, errors).
+
+        ``since`` maps benchmark_code -> latest stored index date so repeat runs
+        only request new points. Unsupported codes (CRISIL/S&P) are skipped
+        without being counted as errors.
+        """
         rows: list[dict] = []
         errors: list[str] = []
+        since = since or {}
 
         for benchmark_code in benchmark_codes:
+            start = since.get(benchmark_code) or from_date
             try:
                 records: list[BenchmarkRecord] = self.nse.fetch_index_history(
-                    benchmark_code, from_date, to_date
+                    benchmark_code, start, to_date
                 )
                 rows.extend(
                     {
@@ -83,10 +94,9 @@ class MarketDataFetcher:
                 )
             except NotImplementedError:
                 logger.info(
-                    "NSE benchmark history not configured; keeping existing data for %s",
+                    "No NSE Total Return Index for %s; load via CSV if needed",
                     benchmark_code,
                 )
-                break
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Benchmark fetch failed for %s: %s", benchmark_code, exc)
                 errors.append(f"{benchmark_code}: {exc}")

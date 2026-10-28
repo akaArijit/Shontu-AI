@@ -195,13 +195,20 @@ class PipelineRunner:
 
     def _latest_nav_dates(self) -> dict:
         """Latest stored NAV date per scheme; empty when unavailable."""
-        loader = getattr(self.reader, "latest_nav_dates", None)
+        return self._reader_dates("latest_nav_dates")
+
+    def _latest_benchmark_dates(self) -> dict:
+        """Latest stored index date per benchmark; empty when unavailable."""
+        return self._reader_dates("latest_benchmark_dates")
+
+    def _reader_dates(self, method: str) -> dict:
+        loader = getattr(self.reader, method, None)
         if loader is None:
             return {}
         try:
             return loader()
         except Exception as exc:  # noqa: BLE001 - fall back to a full fetch
-            logger.warning("Could not load latest NAV dates: %s", exc)
+            logger.warning("Could not load %s: %s", method, exc)
             return {}
 
     def _run_ingestion(self) -> None:
@@ -235,12 +242,30 @@ class PipelineRunner:
             logger.warning("Could not load benchmark codes: %s", exc)
             benchmark_codes = []
 
+        if not benchmark_codes:
+            # First run: scheme_master has no mappings yet, so resolve them
+            # in memory (the resolution step persists them afterwards).
+            benchmark_codes = sorted(
+                {
+                    self.benchmark.resolve(
+                        scheme["scheme_code"],
+                        scheme["scheme_name"],
+                        scheme.get("category") or "Unclassified",
+                    ).benchmark_code.value
+                    for scheme in schemes
+                }
+            )
+
         if benchmark_codes:
-            from_date = self.as_of_date - timedelta(days=365 * 3)
+            from_date = self.as_of_date - timedelta(days=365 * 6)
             bench_rows, bench_errors = self.fetcher.fetch_benchmarks(
-                benchmark_codes, from_date, self.as_of_date
+                benchmark_codes,
+                from_date,
+                self.as_of_date,
+                since=self._latest_benchmark_dates(),
             )
             self.stats["ingestion_errors"] += len(bench_errors)
+            self.stats["errors"].extend(bench_errors)
             if bench_rows:
                 self.writer.upsert_benchmark_history(bench_rows)
                 logger.info("  Ingested %d benchmark rows", len(bench_rows))

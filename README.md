@@ -42,7 +42,7 @@ python rules/demo_rule_engine.py
 python scoring/demo_scoring_engine.py
 
 # Run all tests
-python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
+python -m pytest resolution ingestion features rules scoring test_e2e_pipeline.py db/test_persistence.py api scripts/test_pipeline.py scripts/test_seed_benchmarks.py -v
 ```
 
 ## Project Structure
@@ -93,15 +93,19 @@ fund-engine/
 | Module | Tests | Status |
 |--------|-------|--------|
 | Resolution | 40 | ✅ |
-| Ingestion | 17 | ✅ |
+| Ingestion | 27 | ✅ |
 | Features | 38 | ✅ |
 | Rules | 15 | ✅ |
 | Scoring | 17 | ✅ |
-| **Total** | **127** | ✅ |
+| API | 26 | ✅ |
+| Database persistence | 8 | ✅ |
+| Pipeline & scripts | 8 | ✅ |
+| End-to-end | 1 | ✅ |
+| **Total** | **180** | ✅ |
 
 ```bash
 # Run all tests
-python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
+python -m pytest resolution ingestion features rules scoring test_e2e_pipeline.py db/test_persistence.py api scripts/test_pipeline.py scripts/test_seed_benchmarks.py -v
 ```
 
 ## Deployment

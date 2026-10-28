@@ -133,3 +133,98 @@ def test_benchmark_mapping_upload_applies_known_schemes(monkeypatch):
         for row in rows
     ]
     assert updates == [{"scheme_code": "100001", "benchmark_index": "NIFTY500_TRI"}]
+
+
+BENCHMARK_HISTORY_CSV = """benchmark_code,index_date,index_value
+NIFTY100_TRI,2026-09-30,22000.5
+NIFTY100_TRI,2026-10-01,"22,100.25"
+NIFTY500_TRI,01-10-2026,18000
+NIFTY100_TRI,2026-10-01,99999
+"""
+
+
+def test_benchmark_history_upload_dedupes_and_persists(monkeypatch):
+    cursor = FakeCursor()
+    calls = []
+    monkeypatch.setattr(csv_upload, "get_cursor", _fake_cursor_ctx(cursor, calls))
+
+    response = asyncio.run(
+        csv_upload.upload_benchmark_history_csv(
+            _upload(BENCHMARK_HISTORY_CSV, "history.csv"), dry_run=False
+        )
+    )
+
+    assert response["valid_rows"] == 3
+    assert response["duplicate_rows"] == 1
+    assert response["persisted_rows"] == 3
+    assert response["benchmarks"] == ["NIFTY100_TRI", "NIFTY500_TRI"]
+
+    # Benchmark master placeholders must exist before history (FK).
+    benchmark_sql = [
+        (sql, rows)
+        for sql, rows in cursor.executed_many
+        if "INSERT INTO benchmark_master" in sql
+    ]
+    assert len(benchmark_sql) == 1
+    assert {row["benchmark_code"] for row in benchmark_sql[0][1]} == {
+        "NIFTY100_TRI",
+        "NIFTY500_TRI",
+    }
+
+    history_rows = [
+        row
+        for sql, rows in cursor.executed_many
+        if "INSERT INTO benchmark_history" in sql
+        for row in rows
+    ]
+    assert len(history_rows) == 3
+    # Later duplicate wins and dates are normalised to date objects
+    duplicate = [
+        row
+        for row in history_rows
+        if row["benchmark_code"] == "NIFTY100_TRI"
+        and row["index_date"].isoformat() == "2026-10-01"
+    ]
+    assert duplicate[0]["index_value"] == 99999.0
+    assert all(row["source"] == "csv" for row in history_rows)
+
+
+def test_benchmark_history_upload_rejects_bad_rows(monkeypatch):
+    def _explode(*args, **kwargs):
+        raise AssertionError("invalid rows must not touch the database")
+
+    monkeypatch.setattr(csv_upload, "get_cursor", _explode)
+
+    bad_csv = """benchmark_code,index_date,index_value
+NIFTY100_TRI,not-a-date,100
+NIFTY100_TRI,2026-10-01,not-a-number
+,2026-10-01,100
+NIFTY100_TRI,2026-10-01,-5
+"""
+    response = asyncio.run(
+        csv_upload.upload_benchmark_history_csv(
+            _upload(bad_csv, "bad.csv"), dry_run=False
+        )
+    )
+
+    assert response["valid_rows"] == 0
+    assert response["invalid_rows"] == 4
+    assert response["persisted_rows"] == 0
+    assert response["success"] is False
+
+
+def test_benchmark_history_upload_dry_run(monkeypatch):
+    def _explode(*args, **kwargs):
+        raise AssertionError("dry run must not open a connection")
+
+    monkeypatch.setattr(csv_upload, "get_cursor", _explode)
+
+    response = asyncio.run(
+        csv_upload.upload_benchmark_history_csv(
+            _upload(BENCHMARK_HISTORY_CSV, "history.csv"), dry_run=True
+        )
+    )
+
+    assert response["valid_rows"] == 3
+    assert response["persisted_rows"] == 0
+    assert response["success"] is True

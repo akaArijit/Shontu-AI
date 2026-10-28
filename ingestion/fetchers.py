@@ -6,7 +6,7 @@ Architecture principle: 3-4 ingestion jobs, not one. Build as pluggable adapters
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from enum import Enum
 import requests
@@ -128,6 +128,24 @@ class BaseFetcher(ABC):
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay * (2 ** attempt))
         raise IngestionError(self.source, f"Failed after {self.max_retries} retries", last_error)
+
+    def _post_with_retry(self, url: str, **kwargs) -> requests.Response:
+        """HTTP POST with exponential backoff retry"""
+        last_error = None
+        for attempt in range(self.max_retries):
+            try:
+                response = self.session.post(url, timeout=self.timeout, **kwargs)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay * (2 ** attempt))
+        raise IngestionError(
+            self.source,
+            f"POST failed after {self.max_retries} retries: {last_error}",
+            last_error,
+        )
 
 
 class AmfiNavFetcher(BaseFetcher):
@@ -277,13 +295,18 @@ class MfapiFetcher(BaseFetcher):
 
 class NseIndicesFetcher(BaseFetcher):
     """
-    NSE Indices (niftyindices.com) - TRI index values
-    For benchmark tracking - official source
+    NSE Indices (niftyindices.com) - Total Return Index values.
+
+    Uses the public JSON endpoint behind the "Historical Data" report. The
+    endpoint accepts at most one year per request, so ranges are chunked.
     """
-    
-    # NSE provides CSV downloads for index history
+
     BASE_URL = "https://www.niftyindices.com"
-    
+    TRI_URL = f"{BASE_URL}/BackPage/getTotalReturnIndexString"
+    MAX_DAYS_PER_REQUEST = 365
+    CHUNK_DAYS = 330
+
+    # Display names (kept for the demo/summary output)
     INDEX_MAPPING = {
         "NIFTY100_TRI": "Nifty 100 TRI",
         "NIFTY_LARGEMIDCAP250_TRI": "Nifty LargeMidcap 250 TRI",
@@ -294,32 +317,141 @@ class NseIndicesFetcher(BaseFetcher):
         "CRISIL_HYBRID_35_65": "CRISIL Hybrid 35+65",
         "CRISIL_SHORT_TERM_BOND": "CRISIL Short Term Bond Index",
     }
-    
+
+    # Exact trading-index names required by the NSE endpoint.
+    TRI_INDEX_NAMES = {
+        "NIFTY100_TRI": "NIFTY 100",
+        "NIFTY_LARGEMIDCAP250_TRI": "NIFTY LARGEMIDCAP 250",
+        "NIFTY500_TRI": "NIFTY 500",
+        "NIFTY_MIDCAP150_TRI": "NIFTY MIDCAP 150",
+        "NIFTY_SMALLCAP250_TRI": "NIFTY SMALLCAP 250",
+        "NIFTY50_TRI": "NIFTY 50",
+        "NIFTY_BANK_TRI": "NIFTY BANK",
+        "NIFTY_IT_TRI": "NIFTY IT",
+        "NIFTY_INDIA_CONSUMPTION_TRI": "NIFTY INDIA CONSUMPTION",
+        "NIFTY_INFRASTRUCTURE_TRI": "NIFTY INFRASTRUCTURE",
+        "NIFTY_PHARMA_TRI": "NIFTY PHARMA",
+    }
+
     @property
     def source(self) -> DataSource:
         return DataSource.NSE_INDICES
-    
-    def fetch_index_history(self, benchmark_code: str, from_date: date, to_date: date) -> list[BenchmarkRecord]:
-        """Fetch index history for a benchmark"""
-        # NSE requires specific endpoint construction - simplified here
-        # In production, use the correct NSE historical data API
-        raise NotImplementedError("NSE historical data requires specific API integration")
-    
+
+    def fetch_index_history(
+        self, benchmark_code: str, from_date: date, to_date: date
+    ) -> list[BenchmarkRecord]:
+        """Fetch TRI history for one benchmark, chunked to the API's 1-year limit."""
+        index_name = self.TRI_INDEX_NAMES.get(benchmark_code)
+        if index_name is None:
+            raise NotImplementedError(
+                f"{benchmark_code} is not an NSE Total Return Index; "
+                "load its history via CSV instead"
+            )
+
+        by_date: dict[date, float] = {}
+        chunk_start = from_date
+        while chunk_start <= to_date:
+            chunk_end = min(chunk_start + timedelta(days=self.CHUNK_DAYS), to_date)
+            for row in self._fetch_chunk(index_name, chunk_start, chunk_end):
+                parsed = self._parse_row(row)
+                if parsed is not None:
+                    by_date[parsed[0]] = parsed[1]
+            chunk_start = chunk_end + timedelta(days=1)
+
+        return [
+            BenchmarkRecord(
+                benchmark_code=benchmark_code,
+                index_date=index_date,
+                index_value=index_value,
+                source=self.source,
+            )
+            for index_date, index_value in sorted(by_date.items())
+        ]
+
     def fetch_latest_indices(self) -> list[BenchmarkRecord]:
-        """Fetch latest index values for all tracked benchmarks"""
+        """Fetch the latest available value for every supported index."""
+        to_date = date.today()
+        from_date = to_date - timedelta(days=14)
         records = []
-        today = date.today()
-        
-        # This would typically hit a specific NSE endpoint
-        # Placeholder for actual implementation
-        for code, name in self.INDEX_MAPPING.items():
-            # In real implementation, fetch from NSE
-            pass
-        
+        for benchmark_code in self.TRI_INDEX_NAMES:
+            try:
+                history = self.fetch_index_history(benchmark_code, from_date, to_date)
+            except (IngestionError, NotImplementedError):
+                continue
+            if history:
+                records.append(history[-1])
         return records
-    
+
     def fetch(self) -> list:
-        raise NotImplementedError("Use fetch_latest_indices or fetch_index_history")
+        return self.fetch_latest_indices()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _fetch_chunk(self, index_name: str, start: date, end: date) -> list[dict]:
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": f"{self.BASE_URL}/reports/historical-data",
+            # The NSE site rejects non-browser user agents, so override the
+            # default engine UA for this request only.
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            ),
+        }
+        payload = {
+            "cinfo": json.dumps(
+                {
+                    "name": index_name,
+                    "indexName": index_name,
+                    "startDate": start.strftime("%m/%d/%Y"),
+                    "endDate": end.strftime("%m/%d/%Y"),
+                }
+            )
+        }
+        response = self._post_with_retry(self.TRI_URL, json=payload, headers=headers)
+        return self._parse_response(response)
+
+    def _parse_response(self, response) -> list[dict]:
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise IngestionError(self.source, "NSE returned a non-JSON payload", exc)
+
+        # Current API returns a list; older deployments wrap it in {"d": "..."}.
+        if isinstance(payload, dict):
+            payload = payload.get("d", [])
+            if isinstance(payload, str):
+                payload = json.loads(payload) if payload.strip() else []
+
+        if not isinstance(payload, list):
+            raise IngestionError(self.source, "Unexpected NSE payload shape")
+        return payload
+
+    @staticmethod
+    def _parse_row(row: dict) -> Optional[tuple[date, float]]:
+        raw_date = row.get("Date") or row.get("HistoricalDate")
+        raw_value = row.get("TotalReturnsIndex") or row.get("CLOSE")
+        if not raw_date or raw_value in (None, "", "-"):
+            return None
+
+        parsed_date = None
+        for fmt in ("%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"):
+            try:
+                parsed_date = datetime.strptime(str(raw_date).strip(), fmt).date()
+                break
+            except ValueError:
+                continue
+        if parsed_date is None:
+            return None
+
+        try:
+            return parsed_date, float(str(raw_value).replace(",", ""))
+        except ValueError:
+            return None
 
 
 class RbiFetcher(BaseFetcher):

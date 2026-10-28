@@ -177,7 +177,7 @@ Copy `.env.example` for the full list. Never commit real secrets.
 
 `.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
 
-1. **test** — `pytest` (165 tests) + e2e pipeline
+1. **test** — `pytest` (180 tests) + e2e pipeline
 2. **docker-build** — builds the image, pushes to GHCR
 3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
 4. **deploy-*** — optional Railway CLI deploys
@@ -329,8 +329,10 @@ Deployment plumbing and the data layer are complete:
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 165 tests passing |
+| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 180 tests passing |
+| Benchmark TRI ingestion (`NseIndicesFetcher`) | ✅ Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `scripts/seed_benchmarks.py` backfill |
 | CSV upload/validation/persistence (`/mfd/csv/*`) | ✅ Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
+| Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | ✅ Columns `benchmark_code,index_date,index_value`; overwrites existing points |
 | CSV export (`/mfd/csv/download/scheme-master`) | ✅ Reads `scheme_master`; falls back to the template when the DB is empty |
 | `/health`, `/` | ✅ Working |
 | `/api/v1/mfd/health` | ✅ Queries `pipeline_run_log`; returns `degraded` when DB is empty/unreachable |
@@ -346,17 +348,28 @@ Deployment plumbing and the data layer are complete:
 2. Optionally override benchmarks with
    `POST /api/v1/mfd/csv/upload/benchmark-mappings` (`scheme_code,benchmark_code`).
    Manual mappings are preserved by the nightly resolver.
-3. Run the batch service once (Railway → `fund-engine-batch` → *Run now*). It
+3. Backfill benchmark history once (needed for alpha/correlation metrics):
+   - Preferred: run `python scripts/seed_benchmarks.py --years 6` inside the batch
+     service (`railway run` from the repo root, or a one-off Railway shell). It
+     resolves benchmark codes from `scheme_master`, writes `benchmark_master`
+     placeholders and upserts `benchmark_history`.
+   - Offline/alternative: `POST /api/v1/mfd/csv/upload/benchmark-history` with
+     `benchmark_code,index_date,index_value`. Use this for CRISIL/S&P benchmarks
+     that niftyindices.com does not publish.
+4. Run the batch service once (Railway → `fund-engine-batch` → *Run now*). It
    fetches NAV history from mfapi.in, computes features/rules/scores and writes
    `fund_rolling_returns`, `fund_scores`, `fund_alerts`, `pipeline_run_log`.
-4. Re-run the frontend only if you changed `NEXT_PUBLIC_*` variables (they are
+   Later nightly runs fetch only new NAV/benchmark points.
+5. Re-run the frontend only if you changed `NEXT_PUBLIC_*` variables (they are
    baked in at build time).
 
 ### Known limitations
 
-- `NseIndicesFetcher.fetch_index_history` is still a stub, so benchmark history
-  must be loaded separately (SQL insert or a `benchmark_history` seed script).
-  Alpha/correlation metrics stay empty until that table has rows.
+- The NSE historical-data endpoint is unofficial: it can rate-limit or change
+  shape. Failures are logged per benchmark and do not abort the run; use the CSV
+  import as the fallback.
+- CRISIL and S&P 500 benchmarks have no NSE TRI series and must be loaded via
+  `POST /api/v1/mfd/csv/upload/benchmark-history`.
 - Docker is not installed on the development machine, so the Railway image build
   is validated by CI (GitHub Actions) rather than locally.
 

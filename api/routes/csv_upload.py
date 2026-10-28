@@ -9,7 +9,7 @@ import csv
 import io
 import logging
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel, validator
 from enum import Enum
 
@@ -31,6 +31,17 @@ def _persist(callback):
     except Exception as exc:  # noqa: BLE001
         logger.error("CSV persistence failed: %s", exc)
         raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+
+def _parse_history_date(raw: str) -> date:
+    """Accept ISO and common Indian date formats used in NSE exports."""
+    text = (raw or "").strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d %b %Y", "%d-%b-%Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognised date: {raw}")
 
 
 class SchemeCategory(str, Enum):
@@ -467,6 +478,130 @@ async def upload_benchmark_mappings_csv(
         "skipped_rows": skipped_count,
         "errors": errors,
         "mappings": valid if not dry_run else valid[:10],
+    }
+
+
+@router.post("/upload/benchmark-history")
+async def upload_benchmark_history_csv(
+    file: UploadFile = File(...), dry_run: bool = Query(False)
+):
+    """
+    Upload benchmark index history CSV.
+    Expected columns: benchmark_code, index_date, index_value
+
+    Useful when NSE's site is unreachable or for non-NSE benchmarks
+    (CRISIL, S&P 500). Existing points are overwritten.
+    """
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    content = await file.read()
+    content_str = content.decode("utf-8")
+
+    reader = csv.DictReader(io.StringIO(content_str))
+    rows = list(reader)
+
+    points: dict[tuple[str, date], dict] = {}
+    errors = []
+    duplicate_rows = 0
+
+    for idx, row in enumerate(rows, start=1):
+        try:
+            benchmark_code = (row.get("benchmark_code") or "").strip()
+            raw_date = (row.get("index_date") or "").strip()
+            raw_value = (row.get("index_value") or "").strip()
+
+            if not benchmark_code or not raw_date or not raw_value:
+                errors.append(
+                    {
+                        "row": idx,
+                        "error": "Missing benchmark_code, index_date or index_value",
+                        "data": row,
+                    }
+                )
+                continue
+
+            try:
+                index_date = _parse_history_date(raw_date)
+            except ValueError as exc:
+                errors.append({"row": idx, "error": str(exc), "data": row})
+                continue
+
+            try:
+                index_value = float(raw_value.replace(",", ""))
+            except ValueError:
+                errors.append(
+                    {
+                        "row": idx,
+                        "error": f"Invalid index_value: {raw_value}",
+                        "data": row,
+                    }
+                )
+                continue
+
+            if index_value <= 0:
+                errors.append(
+                    {
+                        "row": idx,
+                        "error": f"index_value must be positive: {raw_value}",
+                        "data": row,
+                    }
+                )
+                continue
+
+            key = (benchmark_code, index_date)
+            if key in points:
+                duplicate_rows += 1
+            points[key] = {
+                "benchmark_code": benchmark_code,
+                "index_date": index_date,
+                "index_value": index_value,
+                "source": "csv",
+            }
+        except Exception as exc:  # noqa: BLE001 - report and continue
+            errors.append({"row": idx, "error": str(exc), "data": row})
+
+    valid = sorted(
+        points.values(), key=lambda p: (p["benchmark_code"], p["index_date"])
+    )
+
+    persisted_count = 0
+    if not dry_run and valid:
+        codes = sorted({point["benchmark_code"] for point in valid})
+
+        def _write(cur):
+            persistence.upsert_benchmarks(
+                cur,
+                [
+                    {
+                        "benchmark_code": code,
+                        "benchmark_name": code,
+                        "category": None,
+                    }
+                    for code in codes
+                ],
+            )
+            return persistence.upsert_benchmark_history(cur, valid)
+
+        persisted_count = _persist(_write)
+
+    message = f"Processed {len(rows)} rows: {len(valid)} valid, {len(errors)} invalid"
+    if duplicate_rows:
+        message += f", {duplicate_rows} duplicate dates replaced"
+    if not dry_run:
+        message += f", {persisted_count} persisted"
+
+    return {
+        "success": len(errors) == 0,
+        "message": message,
+        "total_rows": len(rows),
+        "valid_rows": len(valid),
+        "invalid_rows": len(errors),
+        "duplicate_rows": duplicate_rows,
+        "persisted_rows": persisted_count,
+        "benchmarks": sorted({point["benchmark_code"] for point in valid}),
+        "errors": errors,
+        "preview": valid[:10],
     }
 
 
