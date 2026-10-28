@@ -12,6 +12,11 @@ Full instructions: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## 1. Railway
 
+> **Existing services:** if the service was created before the monorepo split,
+> its Root Directory is still the repository root. `Dockerfile` now lives in
+> `apps/api`, so builds fail with "Dockerfile not found". Set Root Directory to
+> `apps/api` for both the API and batch services, then redeploy.
+
 - [ ] Create project → **Add PostgreSQL**
 - [ ] Apply migrations: `cd apps/api && railway run python scripts/apply_migrations.py`
 - [ ] Create **`fund-engine-api`**: root `apps/api`, Dockerfile auto-detected, healthcheck `/health`, restart **On failure**

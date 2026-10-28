@@ -16,6 +16,11 @@ The production topology is split by workload:
 > dashboard using the tables below — Railway auto-detects `apps/api/Dockerfile`
 > from the service root, so no config file is required.
 
+> **Existing services:** if the service was created before the monorepo split,
+> its Root Directory is still the repository root. `Dockerfile` now lives in
+> `apps/api`, so builds fail with "Dockerfile not found". Set Root Directory to
+> `apps/api` for both the API and batch services, then redeploy.
+
 Files that matter:
 
 - `apps/api/Dockerfile` — installs pipeline + API deps, runs as non-root `appuser`, binds `$PORT`
