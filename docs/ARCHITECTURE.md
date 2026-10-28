@@ -380,7 +380,6 @@ BENCHMARK_MAPPINGS_PATH=/app/config/explicit_benchmark_mappings.json
 # API
 PORT=8000
 ALLOWED_ORIGINS=https://fund-engine-web.up.railway.app
-LOG_LEVEL=INFO
 ```
 
 ### Nightly Job Schedule

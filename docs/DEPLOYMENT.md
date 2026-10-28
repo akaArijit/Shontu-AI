@@ -67,19 +67,14 @@ Variables (Settings → Variables):
 
 ```bash
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-REDIS_URL=                      # optional; leave blank if unused
 SCORING_CONFIG_PATH=/app/config/scoring_config.yaml
 RULES_CONFIG_PATH=/app/config/rules.yaml
 BENCHMARK_MAPPINGS_PATH=/app/config/explicit_benchmark_mappings.json
-LOG_LEVEL=info
-TIMEZONE=Asia/Kolkata
-JWT_SECRET=<generate-a-long-random-string>
-API_KEY_SALT=<generate-a-long-random-string>
 ALLOWED_ORIGINS=https://<your-frontend-domain>
-MFAPI_BASE_URL=https://api.mfapi.in/mf
 ```
 
-Generate secrets: `openssl rand -hex 32`.
+`PORT` is injected by Railway; config paths default to `./config`, so the path
+variables are optional if you keep that layout.
 
 Then **Settings → Networking → Generate Domain**. Verify:
 
@@ -251,8 +246,10 @@ Targets: RTO < 2 h, RPO < 24 h. Keep the last 7 daily + 4 weekly dumps in object
 - Only the frontend domain should be public; keep the API behind HTTPS + `ALLOWED_ORIGINS`
 - TLS terminated by Railway for all generated domains
 - Postgres: encryption at rest, no public access unless you enable TCP Proxy
-- Secrets only in Railway variables; rotate `JWT_SECRET`, `API_KEY_SALT`, `RAILWAY_TOKEN` quarterly
+- Secrets only in Railway variables; rotate `RAILWAY_TOKEN` quarterly
 - Non-root container user (`appuser`) in `Dockerfile`
+- **No user authentication in v1** — CORS only limits browser origins. Share the API
+  URL only with the dashboard build; add an auth layer before exposing it to clients.
 
 ---
 
