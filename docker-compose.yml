@@ -58,7 +58,7 @@ services:
       RULES_CONFIG_PATH: /app/config/rules.yaml
       BENCHMARK_MAPPINGS_PATH: /app/config/explicit_benchmark_mappings.json
     entrypoint: []
-    command: ["python", "scripts/run_nightly.py"]
+    command: ["python", "-m", "fund_engine.services.pipeline"]
     depends_on:
       postgres:
         condition: service_healthy

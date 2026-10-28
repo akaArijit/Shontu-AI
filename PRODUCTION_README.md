@@ -15,7 +15,7 @@ Full instructions: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - [ ] Create project → **Add PostgreSQL**
 - [ ] Apply migrations: `cd apps/api && railway run python scripts/apply_migrations.py`
 - [ ] Create **`fund-engine-api`**: root `apps/api`, Dockerfile auto-detected, healthcheck `/health`, restart **On failure**
-- [ ] Create **`fund-engine-batch`**: root `apps/api`, start `python scripts/run_nightly.py`, cron `0 2 * * *`, restart **Never**
+- [ ] Create **`fund-engine-batch`**: root `apps/api`, start `python -m fund_engine.services.pipeline`, cron `0 2 * * *`, restart **Never**
 - [ ] Set API variables: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `ALLOWED_ORIGINS=https://<frontend-domain>`
 - [ ] Generate the API domain and verify `https://<api-domain>/health`
 

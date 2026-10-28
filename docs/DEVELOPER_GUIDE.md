@@ -26,7 +26,7 @@ cd apps/api
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
-pip install -r requirements.txt -r api/requirements.txt
+pip install -r requirements.txt
 
 # Frontend dependencies
 cd ../web
@@ -34,28 +34,32 @@ npm ci
 
 # Backend tests (from apps/api)
 cd ../api
-python -m pytest resolution ingestion features rules scoring db api scripts test_e2e_pipeline.py -v
+python -m pytest -v
 ```
 
 ### Project Structure
 ```
 fund-engine/
-├── apps/
-│   ├── api/                 # FastAPI + pipeline (Railway)
-│   │   ├── api/             # routes, repository, CORS, tests
-│   │   ├── config/          # YAML/JSON config
-│   │   ├── db/              # migrations, persistence, readers
-│   │   ├── features/        # Feature engineering pipeline
-│   │   ├── ingestion/       # Data fetchers (AMFI, mfapi, NSE TRI)
-│   │   ├── resolution/      # Scheme dedup + benchmark mapping
-│   │   ├── rules/           # Rule engine (alerts)
-│   │   ├── scoring/         # Scoring engine (0-100)
-│   │   ├── scripts/         # Nightly pipeline, seed, migrations
-│   │   └── test_e2e_pipeline.py
-│   └── web/                 # Next.js dashboard (Vercel)
-├── docs/                    # Documentation
-├── docker-compose.yml       # Local Postgres + API + batch
-└── package.json             # Root convenience scripts
++-- apps/
+|   +-- api/                     # FastAPI + pipeline (Railway)
+|   |   +-- src/fund_engine/
+|   |   |   +-- api/             # app factory, routes, HTTP contracts
+|   |   |   +-- core/            # settings, logging, filesystem paths
+|   |   |   +-- db/              # connection, repository, readers/writers
+|   |   |   +-- domain/          # resolution, features, rules, scoring
+|   |   |   +-- ingestion/       # AMFI, mfapi, NSE TRI, macro fetchers
+|   |   |   +-- services/        # pipeline, benchmark seed, migrations
+|   |   +-- tests/               # mirrors the package layout
+|   |   +-- config/              # YAML/JSON config
+|   |   +-- migrations/          # numbered SQL migrations
+|   |   +-- scripts/             # thin CLI wrappers
+|   |   +-- Dockerfile
+|   |   +-- pyproject.toml
+|   |   +-- requirements.txt
+|   +-- web/                     # Next.js dashboard (Vercel)
++-- docs/
++-- docker-compose.yml
++-- package.json
 ```
 
 ---
@@ -90,13 +94,13 @@ python scripts/seed_benchmarks.py --years 6
 ### Development Mode
 ```bash
 # Run with sample data
-python test_e2e_pipeline.py
+python -m pytest tests/test_e2e_pipeline.py -v
 
-# Run specific module demo
-python resolution/demo_scheme_dedup.py
-python features/demo_feature_engineering.py
-python rules/demo_rule_engine.py
-python scoring/demo_scoring_engine.py
+# Run specific module demo (PYTHONPATH=src)
+python -m fund_engine.domain.resolution.demo_scheme_dedup
+python -m fund_engine.domain.features.demo_feature_engineering
+python -m fund_engine.domain.rules.demo_rule_engine
+python -m fund_engine.domain.scoring.demo_scoring_engine
 ```
 
 ---
@@ -105,7 +109,7 @@ python scoring/demo_scoring_engine.py
 
 ### 1. Create Fetcher Class
 ```python
-# ingestion/fetchers.py
+# src/fund_engine/ingestion/fetchers.py
 class MyNewSourceFetcher(BaseFetcher):
     @property
     def source(self) -> DataSource:
@@ -155,7 +159,7 @@ alert_rules:
 
 ### Option 2: Programmatic
 ```python
-from rules.rule_engine import AlertRule, AlertType, AlertSeverity
+from fund_engine.domain.rules.rule_engine import AlertRule, AlertType, AlertSeverity
 
 engine = RuleEngine()
 engine.add_rule(AlertRule(
@@ -196,20 +200,20 @@ penalty_per_month: 2.5  # Increased from 2.0
 ### Unit Tests
 ```bash
 # Run specific module tests
-python -m pytest resolution/test_scheme_dedup.py -v
-python -m pytest scoring/test_scoring_engine.py::TestScoringEngine::test_good_fund_high_score -v
+python -m pytest tests/domain/resolution/test_scheme_dedup.py -v
+python -m pytest tests/domain/scoring/test_scoring_engine.py::TestScoringEngine::test_good_fund_high_score -v
 ```
 
 ### Integration Test
 ```bash
 # Full pipeline with sample data
-python test_e2e_pipeline.py
+python -m pytest tests/test_e2e_pipeline.py -v
 ```
 
 ### Manual Verification
 ```python
 # Quick REPL test
-from scoring.scoring_engine import create_default_scoring_engine
+from fund_engine.domain.scoring.scoring_engine import create_default_scoring_engine
 
 engine = create_default_scoring_engine()
 features = {"alpha_1y": 0.05, "category_percentile_1y": 80, ...}
@@ -227,7 +231,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # Or for specific module
-logging.getLogger('features.feature_engineering').setLevel(logging.DEBUG)
+logging.getLogger('fund_engine.domain.features.feature_engineering').setLevel(logging.DEBUG)
 ```
 
 ### Common Issues

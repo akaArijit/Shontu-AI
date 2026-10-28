@@ -5,7 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "python scripts/run_nightly.py",
+    "startCommand": "python -m fund_engine.services.pipeline",
     "cronSchedule": "0 2 * * *",
     "restartPolicyType": "NEVER",
     "numReplicas": 1

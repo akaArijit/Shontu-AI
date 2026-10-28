@@ -22,42 +22,43 @@ client_id                              benchmark    reason   breakdown   -> Port
 
 ## Features
 
-- **Scheme deduplication** — 5,000 folios to ~400 unique schemes (exact/fuzzy/heuristic matching)
-- **Benchmark mapping** — explicit AMC-declared + SEBI category fallback (20 categories)
-- **Data ingestion** — AMFI NAV, mfapi.in, NSE Indices TRI, RBI, MOSPI, FBIL (pluggable, error-isolated)
-- **Feature engineering** — rolling returns, alpha, drawdown, volatility, category percentile, correlation
-- **Rule engine** — 9 YAML-config alert rules (deterministic, explainable, category overrides)
-- **Scoring engine** — 0-100 weighted fund health score with full explainability + penalty
-- **MFD dashboard** — overview, alerts, category rankings, pipeline health, CSV import/export, settings
+- **Scheme deduplication** â€” 5,000 folios to ~400 unique schemes (exact/fuzzy/heuristic matching)
+- **Benchmark mapping** â€” explicit AMC-declared + SEBI category fallback (20 categories)
+- **Data ingestion** â€” AMFI NAV, mfapi.in, NSE Indices TRI, RBI, MOSPI, FBIL (pluggable, error-isolated)
+- **Feature engineering** â€” rolling returns, alpha, drawdown, volatility, category percentile, correlation
+- **Rule engine** â€” 9 YAML-config alert rules (deterministic, explainable, category overrides)
+- **Scoring engine** â€” 0-100 weighted fund health score with full explainability + penalty
+- **MFD dashboard** â€” overview, alerts, category rankings, pipeline health, CSV import/export, settings
 
 ## Repository structure
 
 ```
 fund-engine/
-├── apps/
-│   ├── api/                     # FastAPI + batch pipeline (Railway)
-│   │   ├── api/                 # HTTP layer (routes, repository, models)
-│   │   ├── config/              # scoring_config.yaml, rules.yaml, mappings
-│   │   ├── db/                  # migrations, persistence, reader queries
-│   │   ├── features/            # feature engineering
-│   │   ├── ingestion/           # AMFI/mfapi/NSE fetchers
-│   │   ├── resolution/          # dedup + benchmark mapping
-│   │   ├── rules/               # alert rule engine
-│   │   ├── scoring/             # 0-100 scoring engine
-│   │   ├── scripts/             # run_nightly, seed_benchmarks, apply_migrations
-│   │   ├── Dockerfile           # Railway API + batch image
-│   │   ├── railway.json         # legacy Railway CaC (optional)
-│   │   ├── railway.batch.json   # legacy Railway cron CaC (optional)
-│   │   └── requirements.txt
-│   └── web/                     # Next.js 14 dashboard (Vercel)
-│       ├── src/app/             # Dashboard, Alerts, Rankings, CSV, Pipeline, Settings
-│       ├── src/components/      # layout, dashboard, UI primitives
-│       ├── src/lib/             # API client, mock API, brand, utils
-│       └── package.json
-├── docs/                        # Architecture, API reference, deployment, dev guide
-├── .github/workflows/ci-cd.yml  # Tests, web build, Docker build, migrations
-├── docker-compose.yml           # Local Postgres + API + batch
-└── package.json                 # Root convenience scripts
++-- apps/
+|   +-- api/                     # FastAPI + batch pipeline (Railway)
+|   |   +-- src/fund_engine/
+|   |   |   +-- api/             # HTTP layer (app factory, routes)
+|   |   |   +-- core/            # settings, logging, paths
+|   |   |   +-- db/              # connection, repository, readers/writers
+|   |   |   +-- domain/          # resolution, features, rules, scoring
+|   |   |   +-- ingestion/       # AMFI/mfapi/NSE fetchers
+|   |   |   +-- services/        # pipeline, seeding, migrations
+|   |   +-- tests/               # mirrors the package layout
+|   |   +-- config/              # scoring_config.yaml, rules.yaml, mappings
+|   |   +-- migrations/          # numbered SQL migrations
+|   |   +-- scripts/             # thin CLI wrappers
+|   |   +-- Dockerfile           # Railway API + batch image
+|   |   +-- pyproject.toml       # pytest/tooling config
+|   |   +-- requirements.txt
+|   +-- web/                     # Next.js 14 dashboard (Vercel)
+|       +-- src/app/             # Dashboard, Alerts, Rankings, CSV, Pipeline, Settings
+|       +-- src/components/      # layout, dashboard, UI primitives
+|       +-- src/lib/             # API client, mock API, brand, utils
+|       +-- package.json
++-- docs/                        # Architecture, API reference, deployment, dev guide
++-- .github/workflows/ci-cd.yml  # Tests, web build, Docker build, migrations
++-- docker-compose.yml           # Local Postgres + API + batch
++-- package.json                 # Root convenience scripts
 ```
 
 ## Quick start (local)
@@ -78,13 +79,14 @@ cd apps/api
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
-pip install -r requirements.txt -r api/requirements.txt
+pip install -r requirements.txt
 
 # Apply pending migrations (records them in schema_migrations)
 DATABASE_URL=postgresql://fund_user:fund_password@localhost:5432/fund_engine \
   python scripts/apply_migrations.py
 
-uvicorn api.main:app --reload --port 8000
+# The app lives in src/fund_engine; uvicorn can load it with --app-dir
+uvicorn fund_engine.api.main:app --app-dir src --reload --port 8000
 ```
 
 - Health: http://localhost:8000/health
@@ -108,6 +110,7 @@ Open http://localhost:3000. Set `NEXT_PUBLIC_USE_MOCK_API=true` (or
 npm run dev            # dashboard dev server
 npm run build          # production dashboard build
 npm run test:api       # full pytest suite (194 tests)
+npm run migrate        # apply pending SQL migrations
 npm run pipeline       # one nightly pipeline run (needs DATABASE_URL)
 npm run seed:benchmarks
 ```
@@ -116,7 +119,7 @@ npm run seed:benchmarks
 
 ```bash
 cd apps/api
-python -m pytest resolution ingestion features rules scoring db api scripts test_e2e_pipeline.py -q
+python -m pytest -q
 ```
 
 | Module | Tests |
@@ -139,10 +142,10 @@ python -m pytest resolution ingestion features rules scoring db api scripts test
 | Dashboard | Vercel | `apps/web` | `apps/web/next.config.js`, env in Vercel |
 | API | Railway (Dockerfile) | `apps/api` | Dockerfile auto-detected; legacy `railway.json` |
 | Batch / cron | Railway (Dockerfile) | `apps/api` | Dockerfile auto-detected; cron `0 2 * * *` UTC |
-| Database | Railway PostgreSQL | — | plugin `DATABASE_URL` |
+| Database | Railway PostgreSQL | â€” | plugin `DATABASE_URL` |
 
 Both platforms auto-deploy on push to `master`. Railway deprecated
-Config-as-Code in 2026 — new services are configured in the dashboard (root
+Config-as-Code in 2026 â€” new services are configured in the dashboard (root
 directory, start command, healthcheck, cron), and the `railway*.json` files in
 `apps/api` are kept only for legacy services. See
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the full runbook: project setup,
@@ -164,6 +167,7 @@ monitoring, backups, rollback, and troubleshooting.
 
 | Document | Description |
 |----------|-------------|
+| [apps/api/README.md](apps/api/README.md) | Backend src layout, local commands, batch entry points |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, data flow, database schema |
 | [DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Development setup, adding sources/rules, testing |
 | [API_REFERENCE.md](docs/API_REFERENCE.md) | REST API endpoints, contracts, error codes |
@@ -171,7 +175,7 @@ monitoring, backups, rollback, and troubleshooting.
 
 ## Roadmap
 
-### Phase 1 (current) — deterministic foundation
+### Phase 1 (current) â€” deterministic foundation
 - Scheme deduplication & benchmark mapping
 - Data ingestion (6 sources)
 - Feature engineering (returns, risk, category-relative)
@@ -179,7 +183,7 @@ monitoring, backups, rollback, and troubleshooting.
 - Scoring engine (0-100, weighted, explainable)
 - Database schema, 15 MFD API endpoints, dashboard
 
-### Phase 2 (future) — ML enhancements
+### Phase 2 (future) â€” ML enhancements
 - Predictive underperformance (XGBoost + SHAP)
 - Manager style drift detection
 - NAV anomaly detection
@@ -190,4 +194,4 @@ explainability is mandatory.
 
 ## License
 
-MIT License — see LICENSE for details.
+MIT License â€” see LICENSE for details.

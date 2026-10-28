@@ -10,7 +10,8 @@
     "lint": "npm --prefix apps/web run lint",
     "install:web": "npm --prefix apps/web ci",
     "test": "npm run test:api",
-    "test:api": "cd apps/api && python -m pytest resolution ingestion features rules scoring db api scripts test_e2e_pipeline.py -q",
+    "test:api": "cd apps/api && python -m pytest -q",
+    "migrate": "cd apps/api && python scripts/apply_migrations.py",
     "seed:benchmarks": "cd apps/api && python scripts/seed_benchmarks.py --years 6",
     "pipeline": "cd apps/api && python scripts/run_nightly.py"
   },

@@ -51,7 +51,7 @@ image build, and pending migrations — it does **not** deploy.
 
 ## 2. Migrations
 
-Migrations live in `apps/api/db/migrations/` (`001` → `004`). Apply them with
+Migrations live in `apps/api/migrations/` (`001` → `004`). Apply them with
 the idempotent runner, which records applied files in `schema_migrations` and
 refuses to re-run modified files.
 
@@ -75,10 +75,10 @@ railway run python scripts/apply_migrations.py             # apply
 ```bash
 cd apps/api
 railway service Postgres
-railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.sql
-railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/002_indexes.sql
-railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/003_views.sql
-railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/004_mfd_views.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_initial_schema.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/002_indexes.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_views.sql
+railway run psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/004_mfd_views.sql
 ```
 
 If you applied the schema manually before adopting the runner, mark it as
@@ -105,7 +105,7 @@ secret `DATABASE_URL` is set (use the Postgres **public** URL with SSL).
 | Config-as-code | leave blank for new services (legacy: `/apps/api/railway.json`) |
 | Healthcheck path | `/health` |
 | Restart policy | On failure |
-| Start command | `sh -c 'uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2'` |
+| Start command | `sh -c 'uvicorn fund_engine.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2'` |
 | Watch paths | `/apps/api/**` (optional; avoids redeploys on dashboard-only changes) |
 
 Variables:
@@ -142,7 +142,7 @@ Railway only promotes a deploy once `/health` returns 200.
 | Root directory | `apps/api` |
 | Config-as-code file | leave blank for new services (legacy: `/apps/api/railway.batch.json`) |
 | Builder | Dockerfile (auto-detected) |
-| Start command | `python scripts/run_nightly.py` |
+| Start command | `python -m fund_engine.services.pipeline` |
 | Cron schedule | `0 2 * * *` (02:00 UTC = 07:30 IST) |
 | Restart policy | **Never** |
 | Healthcheck | none |
@@ -159,8 +159,9 @@ batch-specific variables are required.
 **Sizing:** the pipeline loads every active scheme's 6-year NAV/benchmark
 history into memory. Budget ~1 GB for a few hundred schemes. If the service
 hits its memory limit, raise batch memory or shorten the lookback
-(`DEFAULT_LOOKBACK_DAYS` in `db/queries.py` and the benchmark window in
-`scripts/run_nightly.py`). Keep at least 6 years for 5-year metrics.
+(`DEFAULT_LOOKBACK_DAYS` in `src/fund_engine/db/queries.py` and the benchmark
+window in `src/fund_engine/services/pipeline.py`). Keep at least 6 years for
+5-year metrics.
 
 Manual run:
 
@@ -459,9 +460,9 @@ point `DATABASE_URL` at it and skip the Railway plugin.
 | CSV export (`/mfd/csv/download/scheme-master`) | Reads `scheme_master`; falls back to the template when empty |
 | `/health`, `/` | Working |
 | `/api/v1/mfd/health` | Queries `pipeline_run_log`; `degraded` when DB is empty/unreachable |
-| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | DB-backed (see `api/repository.py`) |
-| `scripts/run_nightly.py` | Full orchestration + persistence |
-| `scripts/apply_migrations.py` | Idempotent runner with checksum tracking |
+| `/api/v1/mfd/scores`, `/alerts`, `/schemes`, `/rankings`, `/macro`, `/meta/*` | DB-backed (see `src/fund_engine/db/repository.py`) |
+| `src/fund_engine/services/pipeline.py` | Full orchestration + persistence |
+| `src/fund_engine/services/migrations.py` | Idempotent runner with checksum tracking |
 | Frontend | Builds on Vercel; empty states when the API has no data; error/not-found/loading boundaries |
 
 ### Known limitations

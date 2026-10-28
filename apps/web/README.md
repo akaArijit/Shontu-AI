@@ -21,7 +21,7 @@ cp .env.example .env.local     # NEXT_PUBLIC_API_URL=http://localhost:8000
 npm run dev                    # http://localhost:3000
 ```
 
-Start the API from `apps/api` (`uvicorn api.main:app --reload --port 8000`) or
+Start the API from `apps/api` (`uvicorn fund_engine.api.main:app --app-dir src --reload --port 8000`) or
 set `NEXT_PUBLIC_USE_MOCK_API=true` to use generated demo data.
 
 ## Build

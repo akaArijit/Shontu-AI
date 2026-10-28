@@ -14,10 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies (pipeline + API)
+# Install Python dependencies (single lock-step requirements file)
 COPY requirements.txt .
-COPY api/requirements.txt ./api-requirements.txt
-RUN pip install --no-cache-dir --user -r requirements.txt -r api-requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt
 
 # ============================================================
 # PRODUCTION STAGE
@@ -38,14 +37,22 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 # Copy Python packages from builder
 COPY --from=builder /root/.local /home/appuser/.local
 
-# Copy application code
-COPY --chown=appuser:appuser . .
+# Copy application code (src layout; runtime config and migrations stay outside src)
+COPY --chown=appuser:appuser src ./src
+COPY --chown=appuser:appuser config ./config
+COPY --chown=appuser:appuser migrations ./migrations
+COPY --chown=appuser:appuser scripts ./scripts
+COPY --chown=appuser:appuser pyproject.toml ./
+
+# Create a writable log directory for the batch pipeline
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app/logs
 
 # Switch to non-root user
 USER appuser
 
-# Add local packages to PATH
-ENV PATH=/home/appuser/.local/bin:$PATH
+# Add local packages to PATH and make the src layout importable
+ENV PATH=/home/appuser/.local/bin:$PATH \
+    PYTHONPATH=/app/src
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -60,4 +67,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8000
 
 # Run application (PORT is injected by the platform, e.g. Railway)
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
+CMD ["sh", "-c", "uvicorn fund_engine.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]

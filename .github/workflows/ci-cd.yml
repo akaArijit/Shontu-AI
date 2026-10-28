@@ -38,28 +38,28 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: |
-            apps/api/requirements.txt
-            apps/api/api/requirements.txt
+          cache-dependency-path: apps/api/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r api/requirements.txt
+          pip install -r requirements.txt
 
       - name: Run test suite
         run: |
-          python -m pytest resolution/ ingestion/ features/ rules/ scoring/ db/ api/ scripts/ test_e2e_pipeline.py -q
+          python -m pytest -q
 
       - name: Run end-to-end pipeline
-        run: python test_e2e_pipeline.py
+        env:
+          PYTHONPATH: src
+        run: python tests/test_e2e_pipeline.py
 
       - name: Check formatting (informational)
         continue-on-error: true
         run: |
           pip install black isort
-          black --check .
-          isort --check-only .
+          black --check src tests
+          isort --check-only src tests
 
   # ============================================================
   # FRONTEND - Vercel-equivalent production build

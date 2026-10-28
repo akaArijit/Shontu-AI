@@ -433,8 +433,8 @@ NEXT_PUBLIC_USE_MOCK_API=false
 
 **Run All Tests**:
 ```bash
-# From project root
-python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
+cd apps/api
+python -m pytest -q
 ```
 
 ---
