@@ -99,9 +99,9 @@ fund-engine/
 | Scoring | 17 | ✅ |
 | API | 26 | ✅ |
 | Database persistence | 8 | ✅ |
-| Pipeline & scripts | 8 | ✅ |
+| Pipeline & scripts | 11 | ✅ |
 | End-to-end | 1 | ✅ |
-| **Total** | **180** | ✅ |
+| **Total** | **183** | ✅ |
 
 ```bash
 # Run all tests

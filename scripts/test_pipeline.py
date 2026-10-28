@@ -47,6 +47,7 @@ class FakeWriter:
         self.schemes = []
         self.benchmarks = []
         self.scheme_benchmarks = []
+        self.benchmark_history = []
         self.features = []
         self.scores = []
         self.alerts = []
@@ -75,6 +76,7 @@ class FakeWriter:
         return len(rows)
 
     def upsert_benchmark_history(self, rows):
+        self.benchmark_history.extend(rows)
         return len(rows)
 
     def upsert_features(self, rows):
@@ -118,39 +120,47 @@ def _benchmark_rows(benchmark_code, drift=0.0004):
     ]
 
 
+SCHEMES = [
+    {
+        "scheme_code": "100001",
+        "scheme_name": "Alpha Large Cap Fund",
+        "amc": "Alpha AMC",
+        "category": "Large Cap",
+        "benchmark_index": None,
+    },
+    {
+        "scheme_code": "100002",
+        "scheme_name": "Beta Large Cap Fund",
+        "amc": "Beta AMC",
+        "category": "Large Cap",
+        "benchmark_index": None,
+    },
+    {
+        "scheme_code": "100003",
+        "scheme_name": "Gamma Flexi Cap Fund",
+        "amc": "Gamma AMC",
+        "category": "Flexi Cap",
+        "benchmark_index": None,
+    },
+]
+
+
+def _all_nav_rows():
+    rows = []
+    rows += _nav_rows("100001", drift=0.0008)
+    rows += _nav_rows("100002", drift=0.0001, amplitude=0.05)
+    rows += _nav_rows("100003", drift=0.0005, amplitude=0.03)
+    return rows
+
+
+def _all_benchmark_rows():
+    return _benchmark_rows("NIFTY100_TRI") + _benchmark_rows("NIFTY500_TRI")
+
+
 def _build_runner(folio_count=7):
-    schemes = [
-        {
-            "scheme_code": "100001",
-            "scheme_name": "Alpha Large Cap Fund",
-            "amc": "Alpha AMC",
-            "category": "Large Cap",
-            "benchmark_index": None,
-        },
-        {
-            "scheme_code": "100002",
-            "scheme_name": "Beta Large Cap Fund",
-            "amc": "Beta AMC",
-            "category": "Large Cap",
-            "benchmark_index": None,
-        },
-        {
-            "scheme_code": "100003",
-            "scheme_name": "Gamma Flexi Cap Fund",
-            "amc": "Gamma AMC",
-            "category": "Flexi Cap",
-            "benchmark_index": None,
-        },
-    ]
-
-    nav_rows = []
-    nav_rows += _nav_rows("100001", drift=0.0008)
-    nav_rows += _nav_rows("100002", drift=0.0001, amplitude=0.05)
-    nav_rows += _nav_rows("100003", drift=0.0005, amplitude=0.03)
-
-    benchmark_rows = _benchmark_rows("NIFTY100_TRI") + _benchmark_rows("NIFTY500_TRI")
-
-    reader = FakeReader(schemes, nav_rows, benchmark_rows, folio_count=folio_count)
+    reader = FakeReader(
+        SCHEMES, _all_nav_rows(), _all_benchmark_rows(), folio_count=folio_count
+    )
     writer = FakeWriter()
     runner = PipelineRunner(
         as_of_date=AS_OF,
@@ -218,3 +228,102 @@ def test_pipeline_marks_run_failed_on_step_exception():
 
     assert writer.status == "failed"
     assert "nav_history unavailable" in writer.finish_kwargs["error_message"]
+
+
+class FakeIngestionFetcher:
+    """Stands in for MarketDataFetcher; records what the runner asked for."""
+
+    def __init__(self, nav_rows, benchmark_rows=None, bench_errors=None):
+        self.nav_rows = nav_rows
+        self.benchmark_rows = benchmark_rows or []
+        self.bench_errors = bench_errors or []
+        self.nav_calls = []
+        self.benchmark_calls = []
+
+    def fetch_nav(self, scheme_codes, since=None):
+        self.nav_calls.append({"codes": list(scheme_codes), "since": since})
+        return list(self.nav_rows), []
+
+    def fetch_benchmarks(self, benchmark_codes, from_date, to_date, since=None):
+        self.benchmark_calls.append(
+            {
+                "codes": list(benchmark_codes),
+                "from_date": from_date,
+                "to_date": to_date,
+                "since": since,
+            }
+        )
+        return list(self.benchmark_rows), list(self.bench_errors)
+
+
+class DatedFakeReader(FakeReader):
+    """Reader that reports stored dates so incremental fetches can be asserted."""
+
+    def latest_nav_dates(self):
+        return {"100001": AS_OF - timedelta(days=5)}
+
+    def latest_benchmark_dates(self):
+        return {"NIFTY100_TRI": AS_OF - timedelta(days=5)}
+
+
+def _build_ingesting_runner(reader=None, fetcher=None):
+    benchmark_rows = _all_benchmark_rows()
+    reader = reader or FakeReader(SCHEMES, _all_nav_rows(), benchmark_rows)
+    writer = FakeWriter()
+    fetcher = fetcher or FakeIngestionFetcher(
+        _all_nav_rows(), [{**row, "source": "nse"} for row in benchmark_rows]
+    )
+    runner = PipelineRunner(
+        as_of_date=AS_OF,
+        reader=reader,
+        writer=writer,
+        fetcher=fetcher,
+        skip_ingest=False,
+    )
+    return runner, reader, writer, fetcher
+
+
+def test_first_run_resolves_benchmarks_before_fetching():
+    """Fresh DB: benchmark_codes() is empty, so the runner resolves in memory."""
+    fresh_reader = FakeReader(SCHEMES, _all_nav_rows(), [])
+    runner, _, writer, fetcher = _build_ingesting_runner(reader=fresh_reader)
+
+    stats = runner.run()
+
+    assert stats["status"] == "completed"
+    assert stats["ingestion_errors"] == 0
+    assert [call["codes"] for call in fetcher.benchmark_calls] == [
+        ["NIFTY100_TRI", "NIFTY500_TRI"]
+    ]
+    assert stats["nav_rows_ingested"] == 3 * 900
+    assert len(writer.benchmark_history) == len(fetcher.benchmark_rows)
+    # Resolution still persists the mappings it used for the fetch.
+    assert {row["benchmark_code"] for row in writer.benchmarks} == {
+        "NIFTY100_TRI",
+        "NIFTY500_TRI",
+    }
+
+
+def test_ingestion_passes_stored_dates_for_incremental_fetch():
+    dated_reader = DatedFakeReader(SCHEMES, _all_nav_rows(), [])
+    runner, _, _, fetcher = _build_ingesting_runner(reader=dated_reader)
+
+    runner.run()
+
+    assert fetcher.nav_calls[0]["since"] == {"100001": AS_OF - timedelta(days=5)}
+    assert fetcher.benchmark_calls[0]["since"] == {
+        "NIFTY100_TRI": AS_OF - timedelta(days=5)
+    }
+    assert fetcher.benchmark_calls[0]["to_date"] == AS_OF
+
+
+def test_benchmark_fetch_errors_mark_run_partial():
+    runner, _, writer, fetcher = _build_ingesting_runner()
+    fetcher.bench_errors = ["NIFTY100_TRI: rate limited"]
+
+    stats = runner.run()
+
+    assert stats["status"] == "partial"
+    assert "NIFTY100_TRI: rate limited" in stats["errors"]
+    assert stats["ingestion_errors"] == 1
+    assert writer.status == "partial"

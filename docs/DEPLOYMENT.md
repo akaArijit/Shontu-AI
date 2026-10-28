@@ -177,7 +177,7 @@ Copy `.env.example` for the full list. Never commit real secrets.
 
 `.github/workflows/ci-cd.yml` runs on push/PR to `master`, `main`, or `develop`:
 
-1. **test** — `pytest` (180 tests) + e2e pipeline
+1. **test** — `pytest` (183 tests) + e2e pipeline
 2. **docker-build** — builds the image, pushes to GHCR
 3. **migrate-db** — applies `db/migrations/*.sql` when `DATABASE_URL` secret is set
 4. **deploy-*** — optional Railway CLI deploys
@@ -329,7 +329,7 @@ Deployment plumbing and the data layer are complete:
 
 | Layer | Status |
 |-------|--------|
-| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 180 tests passing |
+| Scheme dedup, benchmark mapping, features, rules, scoring | ✅ Implemented, 183 tests passing |
 | Benchmark TRI ingestion (`NseIndicesFetcher`) | ✅ Live niftyindices.com endpoint, chunked ranges, incremental nightly fetch, `scripts/seed_benchmarks.py` backfill |
 | CSV upload/validation/persistence (`/mfd/csv/*`) | ✅ Validates then upserts `scheme_master` / `benchmark_master`; `dry_run=true` skips writes |
 | Benchmark history CSV (`/mfd/csv/upload/benchmark-history`) | ✅ Columns `benchmark_code,index_date,index_value`; overwrites existing points |
