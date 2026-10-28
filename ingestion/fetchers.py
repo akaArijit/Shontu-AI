@@ -314,6 +314,11 @@ class NseIndicesFetcher(BaseFetcher):
         "NIFTY_MIDCAP150_TRI": "Nifty Midcap 150 TRI",
         "NIFTY_SMALLCAP250_TRI": "Nifty Smallcap 250 TRI",
         "NIFTY50_TRI": "Nifty 50 TRI",
+        "NIFTY_BANK_TRI": "Nifty Bank TRI",
+        "NIFTY_IT_TRI": "Nifty IT TRI",
+        "NIFTY_INDIA_CONSUMPTION_TRI": "Nifty India Consumption TRI",
+        "NIFTY_INFRASTRUCTURE_TRI": "Nifty Infrastructure TRI",
+        "NIFTY_PHARMA_TRI": "Nifty Pharma TRI",
         "CRISIL_HYBRID_35_65": "CRISIL Hybrid 35+65",
         "CRISIL_SHORT_TERM_BOND": "CRISIL Short Term Bond Index",
     }

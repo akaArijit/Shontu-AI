@@ -371,18 +371,16 @@ GET /api/v1/clients/{client_id}/portfolio?as_of_date=2024-01-15
 ```bash
 # Database
 DATABASE_URL=postgresql://...
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=xxx
 
-# External APIs (optional, for enhanced data)
-MFAPI_BASE_URL=https://api.mfapi.in/mf
-NSE_API_KEY=xxx
-RBI_SCRAPER_ENABLED=true
-
-# Internal
+# Config paths (defaults point at ./config)
 SCORING_CONFIG_PATH=/app/config/scoring_config.yaml
 RULES_CONFIG_PATH=/app/config/rules.yaml
-LOG_LEVEL=info
+BENCHMARK_MAPPINGS_PATH=/app/config/explicit_benchmark_mappings.json
+
+# API
+PORT=8000
+ALLOWED_ORIGINS=https://fund-engine-web.up.railway.app
+LOG_LEVEL=INFO
 ```
 
 ### Nightly Job Schedule
