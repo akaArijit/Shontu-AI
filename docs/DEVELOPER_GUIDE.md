@@ -21,22 +21,24 @@ pip install -r requirements.txt
 cd api && npm install
 
 # Run tests
-python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
+python -m pytest resolution ingestion features rules scoring test_e2e_pipeline.py db/test_persistence.py api scripts/test_pipeline.py scripts/test_seed_benchmarks.py -v
 ```
 
 ### Project Structure
 ```
 fund-engine/
 ├── resolution/          # Scheme dedup + benchmark mapping
-├── ingestion/           # Data fetchers (AMFI, mfapi, NSE, RBI, etc.)
+├── ingestion/           # Data fetchers (AMFI, mfapi, NSE TRI, etc.)
 ├── features/            # Feature engineering pipeline
 ├── rules/               # Rule engine (alerts)
 ├── scoring/             # Scoring engine (0-100)
-├── api/                 # Express API (Next.js frontend separate)
+├── api/                 # FastAPI service (routes, repository)
+├── db/                  # Migrations, persistence, DB readers
+├── frontend/            # Next.js dashboard
 ├── docs/                # Documentation
-├── config/              # YAML configs (scoring, rules)
-├── tests/               # Integration tests
-└── scripts/             # Operational scripts
+├── config/              # YAML/JSON config
+├── scripts/             # Nightly pipeline + benchmark backfill
+└── test_e2e_pipeline.py # End-to-end integration test
 ```
 
 ---
@@ -51,18 +53,20 @@ python scripts/run_nightly.py --date 2024-01-15
 
 ### Individual Steps
 ```bash
-# 1. Ingestion only
-python -m ingestion.fetchers --source amfi,mfapi,nse
+# 1. Ingestion only (NAV + benchmark TRI history)
+python scripts/run_nightly.py --steps ingestion
 
-# 2. Resolution only
-python -m resolution.scheme_dedup --folios-file folios.csv
+# 2. Resolution only (benchmark mapping for unmapped schemes)
+python scripts/run_nightly.py --steps resolution
 
-# 3. Feature engineering
-python -m features.feature_engineering --as-of 2024-01-15
+# 3. Features, rules and scoring against stored data (no network)
+python scripts/run_nightly.py --no-ingest --steps features,rules,scoring,persistence
 
-# 4. Rules + Scoring
-python -m rules.rule_engine --features-file features.json
-python -m scoring.scoring_engine --features-file features.json
+# 4. Dry run: compute everything, write nothing
+python scripts/run_nightly.py --dry-run
+
+# 5. Backfill benchmark history (one-off / after a fresh deploy)
+python scripts/seed_benchmarks.py --years 6
 ```
 
 ### Development Mode

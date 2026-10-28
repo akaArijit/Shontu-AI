@@ -187,8 +187,8 @@ alert_rules:
 ## 🧪 Testing
 
 ```bash
-# All tests (122 tests)
-python -m pytest resolution/ ingestion/ features/ rules/ scoring/ -v
+# All tests (187 tests)
+python -m pytest resolution ingestion features rules scoring test_e2e_pipeline.py db/test_persistence.py api scripts/test_pipeline.py scripts/test_seed_benchmarks.py -v
 
 # Individual modules
 python -m pytest scoring/ -v
@@ -197,7 +197,7 @@ python -m pytest scoring/ -v
 python test_e2e_pipeline.py
 ```
 
-**Results**: 122 tests passing
+**Results**: 187 tests passing
 
 ---
 
@@ -208,12 +208,13 @@ python test_e2e_pipeline.py
 2. Add **PostgreSQL** plugin, then run `db/migrations/*.sql` in order
 3. Create three services from the same repo:
    - `fund-engine-api` — root `/`, Dockerfile builder, healthcheck `/health`
-   - `fund-engine-batch` — root `/`, Dockerfile, start `python scripts/run_nightly.py`, cron `0 2 * * *`, restart policy **Never**
+   - `fund-engine-batch` — root `/`, Dockerfile, Config-as-code `/railway.batch.json` (start `python scripts/run_nightly.py`), cron `0 2 * * *`, restart policy **Never**
    - `fund-engine-web` — root `/frontend`, Nixpacks, start `npx next start -p ${PORT:-3000}`
 4. Add variables from `.env.example` (use `DATABASE_URL=${{Postgres.DATABASE_URL}}`)
-5. Set `NEXT_PUBLIC_API_URL` to the API domain, then set `ALLOWED_ORIGINS` on the API to the frontend domain
+5. Backfill benchmarks once: `railway run python scripts/seed_benchmarks.py --years 6`
+6. Set `NEXT_PUBLIC_API_URL` to the API domain, then set `ALLOWED_ORIGINS` on the API to the frontend domain
 
-Repo config: `railway.json` (API/batch) and `frontend/railway.json` (web). Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Repo config: `railway.json` (API), `railway.batch.json` (batch), `frontend/railway.json` (web). Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### Database Migrations
 ```bash
