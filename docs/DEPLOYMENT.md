@@ -20,6 +20,11 @@ The production topology is split by workload:
 > its Root Directory is still the repository root. `Dockerfile` now lives in
 > `apps/api`, so builds fail with "Dockerfile not found". Set Root Directory to
 > `apps/api` for both the API and batch services, then redeploy.
+>
+> If you cannot change the dashboard immediately, the repository root includes
+> a transitional `Dockerfile`, `railway.json`, and `railway.batch.json` that
+> build `apps/api`. Use it only as a fallback and delete those files once both
+> services use Root Directory `apps/api`.
 
 Files that matter:
 

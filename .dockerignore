@@ -1,0 +1,35 @@
+# Root build context for the transitional legacy Railway Dockerfile.
+# The production image is defined in apps/api/Dockerfile; this file only exists
+# so services still rooted at the repository root can build during migration.
+
+.git
+.github
+.gitignore
+.venv
+venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+
+# Only apps/api is needed by the root Dockerfile
+apps/web
+apps/api/tests
+apps/api/logs
+apps/api/.pytest_cache
+apps/api/__pycache__
+
+logs
+*.log
+data
+exports
+*.parquet
+*.csv
+docs
+*.md
+!README.md
+
+.env
+.env.*
+!.env.example
