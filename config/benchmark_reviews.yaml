@@ -1,0 +1,7 @@
+﻿# Legacy Milestone 2 configuration.
+#
+# This file is intentionally ignored from Milestone 3 onward. Reviewed
+# mappings are edited on the Benchmark Mapping & Data screen and stored in
+# data/local/mfd.sqlite3.
+
+reviewed_mappings: []

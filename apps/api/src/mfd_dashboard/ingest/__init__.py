@@ -1,0 +1,1 @@
+"""InvestWell XLSX snapshot ingestion."""

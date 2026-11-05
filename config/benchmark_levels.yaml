@@ -1,0 +1,7 @@
+﻿# Legacy Milestone 2 configuration.
+#
+# This file is intentionally ignored from Milestone 3 onward. Import local
+# benchmark closing levels as CSV or XLSX on the Benchmark Mapping & Data
+# screen. They are stored in data/local/mfd.sqlite3.
+
+levels: {}

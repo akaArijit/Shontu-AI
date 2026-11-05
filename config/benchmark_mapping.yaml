@@ -1,0 +1,613 @@
+﻿# Suggested benchmark categories and automatic keyword rules.
+#
+# Every automatic mapping starts with status "needs_review". Review and change
+# mappings on the app's Benchmark Mapping & Data screen. Reviewed mappings are
+# stored in local SQLite and preserved across snapshot imports.
+#
+# The keyword matching is case-insensitive and handles common variations:
+# - "fund" is ignored
+# - "&" and "and" are treated equivalently
+# - hyphens are treated as spaces
+# - word boundaries are respected
+
+benchmarks:
+  # Broad Market / Large Cap
+  - name: "Nifty 50 TRI"
+    keywords:
+      - "nifty 50"
+      - "large cap"
+      - "largecap"
+      - "bluechip"
+      - "blue chip"
+      - "large cap fund"
+      - "top 50"
+      - "nifty50"
+
+  - name: "Nifty 100 TRI"
+    keywords:
+      - "nifty 100"
+      - "top 100"
+      - "nifty100"
+      - "large cap 100"
+
+  - name: "Nifty 200 TRI"
+    keywords:
+      - "nifty 200"
+      - "top 200"
+      - "nifty200"
+
+  - name: "Nifty 500 TRI"
+    keywords:
+      - "nifty 500"
+      - "flexi cap"
+      - "flexicap"
+      - "broad market"
+      - "multicap"
+      - "multi cap"
+      - "nifty500"
+      - "flexi"
+      - "multi"
+
+  - name: "Nifty LargeMidcap 250 TRI"
+    keywords:
+      - "large midcap"
+      - "large mid cap"
+      - "large & mid"
+      - "large and mid"
+      - "nifty large midcap"
+      - "nifty largemidcap"
+
+  - name: "Nifty Total Market TRI"
+    keywords:
+      - "total market"
+      - "nifty total market"
+
+  # Mid Cap
+  - name: "Nifty Midcap 50 TRI"
+    keywords:
+      - "midcap 50"
+      - "mid cap 50"
+      - "nifty midcap 50"
+
+  - name: "Nifty Midcap 100 TRI"
+    keywords:
+      - "midcap 100"
+      - "mid cap 100"
+      - "nifty midcap 100"
+
+  - name: "Nifty Midcap 150 TRI"
+    keywords:
+      - "midcap 150"
+      - "mid cap 150"
+      - "midcap"
+      - "mid cap"
+      - "mid cap fund"
+      - "nifty midcap 150"
+      - "nifty midcap150"
+
+  - name: "Nifty Midcap Select TRI"
+    keywords:
+      - "midcap select"
+      - "mid cap select"
+      - "nifty midcap select"
+
+  # Small Cap
+  - name: "Nifty Smallcap 50 TRI"
+    keywords:
+      - "smallcap 50"
+      - "small cap 50"
+      - "nifty smallcap 50"
+
+  - name: "Nifty Smallcap 100 TRI"
+    keywords:
+      - "smallcap 100"
+      - "small cap 100"
+      - "nifty smallcap 100"
+
+  - name: "Nifty Smallcap 250 TRI"
+    keywords:
+      - "smallcap 250"
+      - "small cap 250"
+      - "smallcap"
+      - "small cap"
+      - "small cap fund"
+      - "nifty smallcap 250"
+      - "nifty smallcap250"
+
+  - name: "Nifty Smallcap 500 TRI"
+    keywords:
+      - "smallcap 500"
+      - "small cap 500"
+      - "nifty smallcap 500"
+
+  # Micro Cap
+  - name: "Nifty Microcap 250 TRI"
+    keywords:
+      - "microcap"
+      - "micro cap"
+      - "micro cap fund"
+      - "nifty microcap"
+
+  # Sectoral / Thematic
+  - name: "Nifty Bank TRI"
+    keywords:
+      - "bank"
+      - "banking"
+      - "bank fund"
+      - "nifty bank"
+
+  - name: "Nifty Financial Services TRI"
+    keywords:
+      - "financial services"
+      - "financials"
+      - "finserv"
+      - "nifty financial services"
+
+  - name: "Nifty Healthcare TRI"
+    keywords:
+      - "healthcare"
+      - "pharma"
+      - "health"
+      - "pharmaceutical"
+      - "medical"
+      - "nifty healthcare"
+
+  - name: "Nifty IT TRI"
+    keywords:
+      - " it "
+      - "information technology"
+      - "technology"
+      - "tech fund"
+      - "nifty it"
+
+  - name: "Nifty Pharma TRI"
+    keywords:
+      - "pharma"
+      - "pharmaceutical"
+      - "nifty pharma"
+
+  - name: "Nifty Auto TRI"
+    keywords:
+      - "auto"
+      - "automobile"
+      - "nifty auto"
+
+  - name: "Nifty FMCG TRI"
+    keywords:
+      - "fmcg"
+      - "consumer goods"
+      - "nifty fmcg"
+
+  - name: "Nifty Metal TRI"
+    keywords:
+      - "metal"
+      - "mining"
+      - "nifty metal"
+
+  - name: "Nifty PSU TRI"
+    keywords:
+      - "psu"
+      - "public sector"
+      - "psu fund"
+      - "nifty psu"
+
+  - name: "Nifty Infrastructure TRI"
+    keywords:
+      - "infrastructure"
+      - "infra"
+      - "nifty infrastructure"
+
+  - name: "Nifty Energy TRI"
+    keywords:
+      - "energy"
+      - "power"
+      - "oil gas"
+      - "oil & gas"
+      - "nifty energy"
+
+  - name: "Nifty Commodities TRI"
+    keywords:
+      - "commodities"
+      - "commodity"
+      - "nifty commodities"
+
+  - name: "Nifty Consumption TRI"
+    keywords:
+      - "consumption"
+      - "consumer"
+      - "nifty consumption"
+
+  - name: "Nifty Realty TRI"
+    keywords:
+      - "realty"
+      - "real estate"
+      - "nifty realty"
+
+  - name: "Nifty Media TRI"
+    keywords:
+      - "media"
+      - "entertainment"
+      - "nifty media"
+
+  - name: "Nifty Private Bank TRI"
+    keywords:
+      - "private bank"
+      - "nifty private bank"
+
+  - name: "Nifty PSU Bank TRI"
+    keywords:
+      - "psu bank"
+      - "public sector bank"
+      - "nifty psu bank"
+
+  - name: "Nifty MNC TRI"
+    keywords:
+      - "mnc"
+      - "multinational"
+      - "nifty mnc"
+
+  - name: "Nifty India Defence TRI"
+    keywords:
+      - "defence"
+      - "defense"
+      - "nifty defence"
+
+  - name: "Nifty India Tourism TRI"
+    keywords:
+      - "tourism"
+      - "travel"
+      - "nifty tourism"
+
+  - name: "Nifty Manufacturing TRI"
+    keywords:
+      - "manufacturing"
+      - "nifty manufacturing"
+
+  - name: "Nifty Capital Goods TRI"
+    keywords:
+      - "capital goods"
+      - "nifty capital goods"
+
+  - name: "Nifty Services Sector TRI"
+    keywords:
+      - "services sector"
+      - "nifty services"
+
+  # Strategy / Factor / Smart Beta
+  - name: "Nifty 50 Equal Weight TRI"
+    keywords:
+      - "equal weight"
+      - "ew "
+      - "equalweight"
+
+  - name: "Nifty 100 Equal Weight TRI"
+    keywords:
+      - "nifty 100 equal weight"
+      - "nifty100 equal weight"
+
+  - name: "Nifty 200 Equal Weight TRI"
+    keywords:
+      - "nifty 200 equal weight"
+
+  - name: "Nifty 500 Equal Weight TRI"
+    keywords:
+      - "nifty 500 equal weight"
+
+  - name: "Nifty Alpha 50 TRI"
+    keywords:
+      - "alpha"
+      - "nifty alpha"
+
+  - name: "Nifty Alpha Low-Volatility 30 TRI"
+    keywords:
+      - "alpha low volatility"
+      - "alpha low vol"
+
+  - name: "Nifty Quality Low-Volatility 30 TRI"
+    keywords:
+      - "quality low volatility"
+      - "quality low vol"
+
+  - name: "Nifty Alpha Quality Low-Volatility 30 TRI"
+    keywords:
+      - "alpha quality low volatility"
+      - "alpha quality low vol"
+
+  - name: "Nifty Dividend Opportunities 50 TRI"
+    keywords:
+      - "dividend"
+      - "dividend opportunities"
+      - "dividend yield"
+      - "high dividend"
+      - "div yield"
+
+  - name: "Nifty High Dividend Yield 15 TRI"
+    keywords:
+      - "high dividend yield"
+      - "dividend yield 15"
+
+  - name: "Nifty Growth Sectors 15 TRI"
+    keywords:
+      - "growth sectors"
+
+  - name: "Nifty High Beta 50 TRI"
+    keywords:
+      - "high beta"
+      - "beta 50"
+
+  - name: "Nifty Low Volatility 50 TRI"
+    keywords:
+      - "low volatility"
+      - "low vol"
+      - "low volatility 50"
+
+  - name: "Nifty Midcap150 Momentum 50 TRI"
+    keywords:
+      - "midcap momentum"
+      - "momentum 50"
+
+  - name: "Nifty Midcap150 Quality 50 TRI"
+    keywords:
+      - "midcap quality"
+      - "quality 50"
+
+  - name: "Nifty Quality Low-Volatility 30 TRI"
+    keywords:
+      - "quality low volatility"
+      - "quality low vol 30"
+
+  - name: "Nifty Smallcap250 Momentum Quality 100 TRI"
+    keywords:
+      - "smallcap momentum quality"
+      - "smallcap momentum quality 100"
+
+  - name: "Nifty Smallcap250 Quality 50 TRI"
+    keywords:
+      - "smallcap quality"
+      - "smallcap quality 50"
+
+  - name: "Nifty Top 10 Equal Weight TRI"
+    keywords:
+      - "top 10 equal weight"
+
+  - name: "Nifty Top 15 Equal Weight TRI"
+    keywords:
+      - "top 15 equal weight"
+
+  - name: "Nifty Top 20 Equal Weight TRI"
+    keywords:
+      - "top 20 equal weight"
+
+  - name: "Nifty 50 Value 20 TRI"
+    keywords:
+      - "value"
+      - "value fund"
+      - "value 20"
+      - "nifty 50 value"
+
+  - name: "Nifty 100 Low Volatility 30 TRI"
+    keywords:
+      - "nifty 100 low volatility"
+      - "nifty100 low vol"
+
+  - name: "Nifty 100 Quality 30 TRI"
+    keywords:
+      - "nifty 100 quality"
+      - "nifty100 quality"
+
+  # ELSS / Tax Saver
+  - name: "Nifty 500 TRI"
+    keywords:
+      - "elss"
+      - "tax saver"
+      - "taxsaver"
+      - "80c"
+      - "section 80c"
+      - "elss fund"
+      - "tax saving"
+
+  # Hybrid / Balanced
+  - name: "CRISIL Hybrid 35+65"
+    keywords:
+      - "hybrid"
+      - "balanced"
+      - "balanced advantage"
+      - "dynamic asset allocation"
+      - "asset allocation"
+      - "hybrid fund"
+      - "balanced fund"
+      - "equity debt"
+      - "equity & debt"
+      - "multi asset"
+
+  - name: "Nifty 50 Arbitrage TRI"
+    keywords:
+      - "arbitrage"
+      - "arbitrage fund"
+
+  # Debt / Liquid / Overnight
+  - name: "CRISIL Short Term Bond Index"
+    keywords:
+      - "short term bond"
+      - "short term debt"
+      - "short duration"
+      - "short term fund"
+
+  - name: "CRISIL Liquid Fund Index"
+    keywords:
+      - "liquid"
+      - "liquid fund"
+      - "money market"
+      - "overnight"
+      - "overnight fund"
+
+  # Index / ETF
+  - name: "Nifty 50 TRI"
+    keywords:
+      - "index fund"
+      - "index "
+      - "etf "
+      - "exchange traded"
+      - "nifty index"
+
+  # Fund House specific patterns (major AMCs) - these help disambiguate
+  # These keywords will match alongside category keywords for higher confidence
+  - name: "Nifty 50 TRI"
+    keywords:
+      - "hdfc top 100"
+      - "icici pru bluechip"
+      - "mirae asset large cap"
+      - "sbi bluechip"
+      - "kotak bluechip"
+      - "axis bluechip"
+      - "nippon india large cap"
+      - "aditya birla sun life frontline equity"
+      - "tata large cap"
+
+  - name: "Nifty Midcap 150 TRI"
+    keywords:
+      - "hdfc mid cap"
+      - "icici pru midcap"
+      - "sbi midcap"
+      - "kotak midcap"
+      - "axis midcap"
+      - "nippon india midcap"
+      - "aditya birla sun life midcap"
+      - "tata midcap"
+      - "kotak emerging equity"
+      - "dsp midcap"
+      - "utic midcap"
+
+  - name: "Nifty Smallcap 250 TRI"
+    keywords:
+      - "hdfc small cap"
+      - "icici pru smallcap"
+      - "sbi small cap"
+      - "kotak small cap"
+      - "axis small cap"
+      - "nippon india small cap"
+      - "aditya birla sun life small cap"
+      - "tata small cap"
+      - "dsp small cap"
+      - "utic small cap"
+
+  - name: "Nifty 500 TRI"
+    keywords:
+      - "parag parikh flexi cap"
+      - "kotak flexicap"
+      - "hdfc flexi cap"
+      - "icici pru flexicap"
+      - "sbi flexicap"
+      - "axis flexicap"
+      - "utic flexicap"
+      - "dsp flexi cap"
+
+  - name: "Nifty 500 TRI"
+    keywords:
+      - "dsp elss tax saver"
+      - "hdfc tax saver"
+      - "icici pru elss"
+      - "sbi elss"
+      - "axis elss"
+      - "kotak tax saver"
+      - "aditya birla sun life elss"
+      - "tata elss"
+      - "utic elss"
+      - "elss tax saver"
+
+  - name: "CRISIL Hybrid 35+65"
+    keywords:
+      - "icici pru balanced advantage"
+      - "hdfc balanced advantage"
+      - "sbi balanced advantage"
+      - "kotak balanced advantage"
+      - "axis balanced advantage"
+      - "aditya birla sun life balanced advantage"
+      - "tata balanced advantage"
+      - "dsp balanced advantage"
+      - "utic balanced advantage"
+
+  - name: "Nifty 50 Arbitrage TRI"
+    keywords:
+      - "icici pru arbitrage"
+      - "hdfc arbitrage"
+      - "kotak arbitrage"
+      - "axis arbitrage"
+      - "aditya birla sun life arbitrage"
+
+  - name: "CRISIL Liquid Fund Index"
+    keywords:
+      - "icici pru liquid"
+      - "hdfc liquid"
+      - "sbi liquid"
+      - "kotak liquid"
+      - "axis liquid"
+      - "aditya birla sun life liquid"
+      - "tata liquid"
+      - "nippon india liquid"
+      - "utic liquid"
+
+  - name: "Nifty PSU TRI"
+    keywords:
+      - "sbi psu"
+      - "hdfc psu"
+      - "psu equity"
+      - "psu fund"
+
+  - name: "Nifty Healthcare TRI"
+    keywords:
+      - "icici pru pharma"
+      - "hdfc pharma"
+      - "sbi pharma"
+      - "nippon india pharma"
+      - "utic pharma"
+      - "dsp pharma"
+
+  - name: "Nifty Bank TRI"
+    keywords:
+      - "icici pru bank"
+      - "hdfc bank"
+      - "nippon india bank"
+      - "utic bank"
+
+  - name: "Nifty Infrastructure TRI"
+    keywords:
+      - "icici pru infrastructure"
+      - "hdfc infrastructure"
+      - "tata infrastructure"
+      - "sbi infrastructure"
+      - "kotak infrastructure"
+
+  - name: "Nifty India Defence TRI"
+    keywords:
+      - "icici pru defence"
+      - "hdfc defence"
+      - "nippon india defence"
+
+  - name: "Nifty India Tourism TRI"
+    keywords:
+      - "icici pru tourism"
+      - "nippon india tourism"
+
+  - name: "Nifty India Manufacturing TRI"
+    keywords:
+      - "icici pru manufacturing"
+      - "hdfc manufacturing"
+      - "nippon india manufacturing"
+
+  - name: "Nifty ESG TRI"
+    keywords:
+      - "esg"
+      - "sustainable"
+      - "responsible"
+      - "nifty esg"
+
+  - name: "Nifty 50 ESG TRI"
+    keywords:
+      - "nifty 50 esg"
+      - "nifty50 esg"
+
+  - name: "Other / Unmapped"
+    keywords: []
+
+default: "Other / Unmapped"

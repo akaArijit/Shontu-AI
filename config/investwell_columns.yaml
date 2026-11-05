@@ -1,0 +1,265 @@
+﻿# Column aliases for the four InvestWell XLSX/CSV exports.
+#
+# Header matching ignores case, punctuation and extra spaces.  The importer
+# only reads the fields listed below; PAN, Aadhaar, contact, bank, KYC,
+# nominee and address columns are ignored and are reported as sensitive.
+#
+# Nothing here is guessed at runtime: if a required column is not found, the
+# preview is blocked with a clear message instead of zero-filling the field.
+
+date_formats:
+  - "%d-%m-%Y"
+  - "%d/%m/%Y"
+  - "%Y-%m-%d"
+  - "%d-%b-%Y"
+  - "%d %b %Y"
+  - "%d-%m-%y"
+  - "%d/%m/%y"
+  - "%Y/%m/%d"
+
+files:
+  clients:
+    label: "Client Details"
+    required:
+      - name
+    fields:
+      name:
+        - "NAME"
+        - "CLIENT NAME"
+        - "CLIENT"
+        - "INVESTOR NAME"
+        - "CUSTOMER NAME"
+        - "APPLICANT NAME"
+      iwell_code:
+        - "IWELL CODE"
+        - "IWELLCODE"
+        - "IWELL CODE NO"
+        - "IWELLCODE NO"
+        - "IWELL ID"
+      iwell_code_2:
+        - "IWELL CODE 2"
+        - "IWELL CODE2"
+        - "IWELLCODE2"
+        - "IWELL CODE II"
+      app_code:
+        - "APPCODE"
+        - "APP CODE"
+        - "APP CODE NO"
+        - "APPLICATION CODE"
+      first_investment_date:
+        - "FIRST INVESTMENT DATE"
+        - "FIRST INV DATE"
+        - "FIRST PURCHASE DATE"
+        - "DATE OF FIRST INVESTMENT"
+      client_aum:
+        - "AUM"
+        - "TOTAL AUM"
+        - "CLIENT AUM"
+
+  folios:
+    label: "Folios"
+    required:
+      - folio_number
+      - scheme_name
+    fields:
+      client_name:
+        - "CLIENT NAME"
+        - "NAME"
+        - "CLIENT"
+        - "INVESTOR NAME"
+      iwell_code:
+        - "IWELL CODE"
+        - "IWELLCODE"
+        - "IWELL CODE NO"
+        - "IWELLCODE NO"
+        - "IWELL ID"
+      iwell_code_2:
+        - "IWELL CODE 2"
+        - "IWELL CODE2"
+        - "IWELLCODE2"
+        - "IWELL CODE II"
+      app_code:
+        - "APP CODE"
+        - "APPCODE"
+        - "APPLICATION CODE"
+      folio_number:
+        - "FOLIO NO"
+        - "FOLIO NUMBER"
+        - "FOLIO"
+        - "FOLIO ID"
+        - "ACCOUNT NUMBER"
+        - "ACCOUNT NO"
+      scheme_name:
+        - "SCHEME NAME"
+        - "SCHEME"
+        - "FUND NAME"
+        - "MUTUAL FUND NAME"
+        - "PRODUCT NAME"
+      folio_type:
+        - "FOLIO TYPE"
+        - "HOLDING TYPE"
+        - "HOLDING NATURE"
+        - "MODE OF HOLDING"
+        - "FOLIO STATUS"
+      units:
+        - "UNITS"
+        - "BALANCE UNITS"
+        - "QUANTITY"
+        - "UNITS HELD"
+      aum:
+        - "AUM"
+        - "CURRENT VALUE"
+        - "MARKET VALUE"
+        - "VALUATION"
+        - "PRESENT VALUE"
+
+  portfolio:
+    label: "Portfolio Valuation"
+    required:
+      - client_name
+      - current_value
+    fields:
+      client_name:
+        - "CLIENT NAME"
+        - "NAME"
+        - "CLIENT"
+        - "INVESTOR NAME"
+      iwell_code:
+        - "IWELL CODE"
+        - "IWELLCODE"
+        - "IWELL CODE NO"
+        - "IWELLCODE NO"
+        - "IWELL ID"
+      iwell_code_2:
+        - "IWELL CODE 2"
+        - "IWELL CODE2"
+        - "IWELLCODE2"
+        - "IWELL CODE II"
+      app_code:
+        - "APP CODE"
+        - "APPCODE"
+        - "APPLICATION CODE"
+      balance_units:
+        - "BALANCE UNITS"
+        - "UNITS"
+        - "QUANTITY"
+      purchase_value:
+        - "PURCHASE VALUE"
+        - "INVESTED VALUE"
+        - "INVESTMENT VALUE"
+        - "COST VALUE"
+        - "PURCHASE AMOUNT"
+      current_value:
+        - "CURRENT VALUE"
+        - "MARKET VALUE"
+        - "VALUATION"
+        - "PRESENT VALUE"
+        - "CURRENT MARKET VALUE"
+      gain:
+        - "GAIN"
+        - "ABSOLUTE GAIN"
+        - "PROFIT"
+        - "LOSS"
+      absolute_return:
+        - "ABSOLUTE RETURN"
+        - "ABS RETURN"
+        - "RETURN"
+      cagr:
+        - "CAGR"
+        - "COMPOUND ANNUAL GROWTH RATE"
+      avg_holding_days:
+        - "AVG HOLDING DAYS"
+        - "AVERAGE HOLDING DAYS"
+        - "HOLDING DAYS"
+      one_day_change:
+        - "ONE DAY CHANGE"
+        - "1 DAY CHANGE"
+        - "DAILY CHANGE"
+      dividend:
+        - "DIVIDEND"
+        - "DIVIDEND RECEIVED"
+
+  transactions:
+    label: "Transaction Statement"
+    required:
+      - transaction_date
+      - folio_number
+      - scheme_name
+      - txn_type
+      - amount
+    fields:
+      transaction_date:
+        - "TRANSACTION DATE"
+        - "TXN DATE"
+        - "DATE"
+        - "TRADE DATE"
+      folio_number:
+        - "FOLIO NO"
+        - "FOLIO NUMBER"
+        - "FOLIO"
+        - "FOLIO ID"
+        - "ACCOUNT NUMBER"
+        - "ACCOUNT NO"
+      scheme_name:
+        - "SCHEME NAME"
+        - "SCHEME"
+        - "FUND NAME"
+        - "MUTUAL FUND NAME"
+        - "PRODUCT NAME"
+      client_name:
+        - "APPLICANT"
+        - "CLIENT NAME"
+        - "NAME"
+        - "CLIENT"
+        - "INVESTOR NAME"
+      iwell_code:
+        - "IWELL CODE"
+        - "IWELLCODE"
+        - "IWELL CODE NO"
+        - "IWELLCODE NO"
+        - "IWELL ID"
+      iwell_code_2:
+        - "IWELL CODE 2"
+        - "IWELL CODE2"
+        - "IWELLCODE2"
+        - "IWELL CODE II"
+      app_code:
+        - "APP CODE"
+        - "APPCODE"
+        - "APP CODE NO"
+        - "APPLICATION CODE"
+      txn_type:
+        - "TXN TYPE"
+        - "TRANSACTION TYPE"
+        - "TYPE"
+      amount:
+        - "TOTAL AMOUNT"
+        - "AMOUNT"
+        - "TRANSACTION AMOUNT"
+        - "PURCHASE AMOUNT"
+        - "REDEMPTION AMOUNT"
+      units:
+        - "UNITS"
+        - "QUANTITY"
+      nav:
+        - "NAV"
+        - "NAV APPLICABLE"
+        - "RATE"
+      source_scheme_name:
+        - "SOURCE SCHEME NAME"
+        - "FROM SCHEME"
+        - "SOURCE SCHEME"
+      target_scheme_name:
+        - "TARGET SCHEME NAME"
+        - "TO SCHEME"
+        - "TARGET SCHEME"
+      description:
+        - "TXN DESCRIPTION"
+        - "TRANSACTION DESCRIPTION"
+        - "DESCRIPTION"
+        - "REMARKS"
+      sip_reg_date:
+        - "SIP REG DATE"
+        - "SIP REGISTRATION DATE"
+
+
