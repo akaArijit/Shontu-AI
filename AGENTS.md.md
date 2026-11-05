@@ -123,3 +123,12 @@ Give exactly 2–3 short lines:
 
 Do not include long logs, full file lists, or detailed technical explanations in the Completion Summary.
 Keep the rest of the response concise.
+
+## Git workflow rule
+
+After completing any milestone, bug-fix session, or meaningful code change:
+- Run relevant tests and production build.
+- Commit all intended project changes with a clear message.
+- Push to GitHub.
+- Never commit secrets, client data, uploaded files, database files, or temporary/build artifacts.
+- Report the commit hash and remote branch in the Completion Summary.
